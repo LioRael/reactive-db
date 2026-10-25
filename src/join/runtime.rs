@@ -1,5 +1,6 @@
 use super::index::{Index, Patch};
 use super::output::Mode;
+use crate::engine::Token;
 use crate::engine::{Node, NodeId, Pending, Prepared, Stages, State};
 use crate::{Change, Epoch};
 use crate::{Error, budget::Meter};
@@ -20,7 +21,7 @@ struct IndexUpdates<LI, L, RI, R, J> {
 
 pub(super) struct JoinNode<LI, L, RI, R, J, M: Mode<LI, RI, L, R>> {
     state: OutputState<LI, RI, L, R, M>,
-    token: Weak<()>,
+    token: Weak<Token>,
     left_parent: NodeId,
     right_parent: NodeId,
     left: Index<LI, L, J>,
@@ -36,7 +37,7 @@ impl<
 > JoinNode<LI, L, RI, R, J, M>
 {
     pub fn new(
-        token: Weak<()>,
+        token: Weak<Token>,
         left_parent: NodeId,
         right_parent: NodeId,
         left: Index<LI, L, J>,
@@ -97,8 +98,11 @@ impl<
     fn state_mut(&mut self) -> &mut dyn Any {
         &mut self.state
     }
-    fn alive(&self) -> bool {
-        self.token.strong_count() > 0
+    fn register(&self) {
+        Token::register(&self.token);
+    }
+    fn parents(&self) -> Vec<NodeId> {
+        vec![self.left_parent, self.right_parent]
     }
     fn source_changes(
         &self,

@@ -1,6 +1,7 @@
 use super::plan::Selector;
 use super::types::{OrderKey, OrderedRow};
 use crate::budget::Meter;
+use crate::engine::Token;
 use crate::engine::{Node, NodeId, Pending, Prepared, Stages, State};
 use crate::{Change, Epoch, Error};
 use std::any::Any;
@@ -17,7 +18,7 @@ struct Patch<I, T, S> {
 }
 pub(super) struct OrderNode<I, T, S> {
     state: State<I, OrderedRow<I, T, S>>,
-    token: Weak<()>,
+    token: Weak<Token>,
     parent: NodeId,
     selector: Selector<T, S>,
     limit: Option<usize>,
@@ -33,7 +34,7 @@ fn row<I: Clone, T, S: Clone>(key: &OrderKey<S, I>, value: &Arc<T>) -> Arc<Order
 }
 impl<I: Ord + Clone + 'static, T: 'static, S: Ord + Clone + 'static> OrderNode<I, T, S> {
     pub fn new(
-        token: Weak<()>,
+        token: Weak<Token>,
         parent: NodeId,
         selector: Selector<T, S>,
         limit: Option<usize>,
@@ -104,8 +105,11 @@ impl<I: Ord + Clone + 'static, T: 'static, S: Ord + Clone + 'static> Node for Or
     fn ordered_index(&self) -> Option<&dyn Any> {
         Some(&self.index)
     }
-    fn alive(&self) -> bool {
-        self.token.strong_count() > 0
+    fn register(&self) {
+        Token::register(&self.token);
+    }
+    fn parents(&self) -> Vec<NodeId> {
+        vec![self.parent]
     }
     fn source_changes(&self, _: Box<dyn Any>, _: &mut Meter) -> Result<Box<dyn Any>, Error> {
         unreachable!("ordered query is not writable")

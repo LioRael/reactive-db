@@ -1,4 +1,5 @@
 use crate::budget::Meter;
+use crate::engine::Token;
 use crate::engine::{self, Node, NodeId, Nodes, Owner, Pending, Prepared, Stages, State};
 use crate::query::Plan;
 use crate::{Change, Database, Epoch, Error, Query};
@@ -87,7 +88,7 @@ impl<I: Ord + Clone + 'static, T: 'static, G: Ord + Clone + 'static> GroupedQuer
         Query {
             owner: self.parent.owner.clone(),
             plan: Rc::new(GroupPlan {
-                token: Rc::new(()),
+                token: Token::new(&self.parent.owner),
                 parent: self.parent,
                 key: self.key,
                 value,
@@ -98,7 +99,7 @@ impl<I: Ord + Clone + 'static, T: 'static, G: Ord + Clone + 'static> GroupedQuer
     }
 }
 struct GroupPlan<I, T, G, O> {
-    token: Rc<()>,
+    token: Rc<Token>,
     parent: Query<I, T>,
     key: GroupKey<T, G>,
     value: Value<T>,
@@ -124,7 +125,7 @@ struct Updates<I, G> {
 }
 struct GroupNode<I, T, G, O> {
     state: State<G, O>,
-    token: Weak<()>,
+    token: Weak<Token>,
     parent: NodeId,
     members: BTreeMap<I, (G, i64)>,
     groups: BTreeMap<G, Group>,
@@ -227,8 +228,11 @@ impl<I: Ord + Clone + 'static, T: 'static, G: Ord + Clone + 'static, O: Eq + 'st
     fn state_mut(&mut self) -> &mut dyn Any {
         &mut self.state
     }
-    fn alive(&self) -> bool {
-        self.token.strong_count() > 0
+    fn register(&self) {
+        Token::register(&self.token);
+    }
+    fn parents(&self) -> Vec<NodeId> {
+        vec![self.parent]
     }
     fn source_changes(&self, _: Box<dyn Any>, _: &mut Meter) -> Result<Box<dyn Any>, Error> {
         unreachable!("group is not writable")
@@ -328,7 +332,7 @@ impl<I: Ord + Clone + 'static, T: 'static, G: Ord + Clone + 'static, O: Eq + 'st
 impl<I: Ord + Clone + 'static, T: 'static, G: Ord + Clone + 'static, O: Eq + 'static> Plan
     for GroupPlan<I, T, G, O>
 {
-    fn token(&self) -> &Rc<()> {
+    fn token(&self) -> &Rc<Token> {
         &self.token
     }
     fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {

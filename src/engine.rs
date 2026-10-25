@@ -2,7 +2,7 @@ use crate::budget::Meter;
 use crate::journal::Journal;
 use crate::{Change, Epoch, Error};
 use std::any::Any;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
@@ -18,12 +18,14 @@ pub(crate) type Transform<A, B> = Rc<dyn Fn(&Arc<A>) -> Option<Arc<B>>>;
 pub(crate) struct Owner {
     pub alive: Cell<bool>,
     pub poisoned: Cell<bool>,
+    pub retired: RefCell<Vec<NodeId>>,
 }
 impl Owner {
     pub fn new() -> Self {
         Self {
             alive: Cell::new(true),
             poisoned: Cell::new(false),
+            retired: RefCell::new(Vec::new()),
         }
     }
     pub fn check(self: &Rc<Self>, target: &Rc<Self>) -> Result<(), Error> {
@@ -39,6 +41,38 @@ impl Owner {
         Ok(())
     }
 }
+pub(crate) struct Token {
+    owner: Weak<Owner>,
+    registered: Cell<bool>,
+}
+impl Token {
+    pub fn new(owner: &Rc<Owner>) -> Rc<Self> {
+        Rc::new(Self {
+            owner: Rc::downgrade(owner),
+            registered: Cell::new(false),
+        })
+    }
+    pub fn register(token: &Weak<Self>) {
+        token
+            .upgrade()
+            .expect("new node retains its plan")
+            .registered
+            .set(true);
+    }
+}
+impl Drop for Token {
+    fn drop(&mut self) {
+        if self.registered.get()
+            && let Some(owner) = self.owner.upgrade()
+            && owner.alive.get()
+        {
+            owner
+                .retired
+                .borrow_mut()
+                .push(self as *const Self as NodeId);
+        }
+    }
+}
 pub(crate) struct PanicGuard(pub Rc<Owner>);
 impl Drop for PanicGuard {
     fn drop(&mut self) {
@@ -47,7 +81,7 @@ impl Drop for PanicGuard {
         }
     }
 }
-pub(crate) fn node_id(token: &Rc<()>) -> NodeId {
+pub(crate) fn node_id(token: &Rc<Token>) -> NodeId {
     Rc::as_ptr(token) as usize
 }
 
@@ -96,7 +130,8 @@ pub(crate) struct Prepared {
 pub(crate) trait Node {
     fn state(&self) -> &dyn Any;
     fn state_mut(&mut self) -> &mut dyn Any;
-    fn alive(&self) -> bool;
+    fn register(&self);
+    fn parents(&self) -> Vec<NodeId>;
     fn ordered_index(&self) -> Option<&dyn Any> {
         None
     }
@@ -108,18 +143,11 @@ pub(crate) trait Node {
 }
 
 pub(crate) enum Lease {
-    Source(Rc<()>),
-    Derived(Weak<()>),
-}
-impl Lease {
-    fn alive(&self) -> bool {
-        match self {
-            Self::Source(token) => Rc::strong_count(token) > 0,
-            Self::Derived(token) => token.strong_count() > 0,
-        }
-    }
+    Source(Rc<Token>),
+    Derived(Weak<Token>),
 }
 pub(crate) trait Evaluate<K, T> {
+    fn parent(&self) -> NodeId;
     fn prepare(
         &self,
         current: &State<K, T>,
@@ -139,8 +167,16 @@ impl<K: Ord + Clone + 'static, T: 'static> Node for Runtime<K, T> {
     fn state_mut(&mut self) -> &mut dyn Any {
         &mut self.state
     }
-    fn alive(&self) -> bool {
-        self.lease.alive()
+    fn register(&self) {
+        match &self.lease {
+            Lease::Source(token) => token.registered.set(true),
+            Lease::Derived(token) => Token::register(token),
+        }
+    }
+    fn parents(&self) -> Vec<NodeId> {
+        self.evaluator
+            .as_ref()
+            .map_or_else(Vec::new, |e| vec![e.parent()])
     }
     fn source_changes(
         &self,
@@ -187,6 +223,9 @@ pub(crate) struct Linear<K, A, B> {
     pub marker: std::marker::PhantomData<fn() -> K>,
 }
 impl<K: Ord + Clone + 'static, A: 'static, B: 'static> Evaluate<K, B> for Linear<K, A, B> {
+    fn parent(&self) -> NodeId {
+        self.parent
+    }
     fn prepare(
         &self,
         current: &State<K, B>,
@@ -222,4 +261,30 @@ pub(crate) fn state_mut<K: 'static, T: 'static>(node: &mut dyn Node) -> &mut Sta
     node.state_mut()
         .downcast_mut()
         .expect("typed handle matches its registered state")
+}
+
+#[cfg(test)]
+mod token_tests {
+    use super::*;
+
+    #[test]
+    fn only_registered_live_database_tokens_enqueue_retirement() {
+        let owner = Rc::new(Owner::new());
+        for _ in 0..1000 {
+            drop(Token::new(&owner));
+        }
+        assert!(owner.retired.borrow().is_empty());
+        let token = Token::new(&owner);
+        let id = node_id(&token);
+        let weak = Rc::downgrade(&token);
+        Token::register(&weak);
+        drop(token);
+        assert_eq!(*owner.retired.borrow(), vec![id]);
+        owner.retired.borrow_mut().clear();
+        let token = Token::new(&owner);
+        Token::register(&Rc::downgrade(&token));
+        owner.alive.set(false);
+        drop(token);
+        assert!(owner.retired.borrow().is_empty());
+    }
 }

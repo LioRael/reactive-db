@@ -11,7 +11,8 @@ pub struct ExecutionBudget {
     pub max_input_changes: usize,
     /// Source and derived transitions in total, including initial constructed rows.
     pub max_output_changes: usize,
-    /// Logical row visits, candidates and graph visits, excluding tree comparisons.
+    /// Logical row/candidate visits, reached nodes and traversed dependency edges.
+    /// Excludes tree comparisons and lease retirement; not a wall-clock bound.
     pub max_work: usize,
 }
 impl Default for ExecutionBudget {

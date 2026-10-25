@@ -1,3 +1,6 @@
+> Historical M0–M3 audit. The active-node scheduling limitation below was subsequently
+> addressed; see [scheduler follow-up](scheduler-performance.md).
+
 # M0–M3 audit and performance measurements
 
 Local macOS arm64 audit of all 23 library source files, public contracts and test

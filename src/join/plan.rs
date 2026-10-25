@@ -2,6 +2,7 @@ use super::index::{Index, Selector};
 use super::output::{Inner, Left, Mode};
 use super::runtime::JoinNode;
 use crate::budget::Meter;
+use crate::engine::Token;
 use crate::engine::{self, NodeId, Nodes, Owner};
 use crate::query::Plan;
 use crate::{Database, Error, Joined, LeftJoined, Query};
@@ -76,7 +77,7 @@ impl<LI: Ord + Clone + 'static, L: 'static> Query<LI, L> {
         Query {
             owner: self.owner.clone(),
             plan: Rc::new(JoinPlan::<LI, L, RI, R, J, M> {
-                token: Rc::new(()),
+                token: Token::new(&self.owner),
                 left: self,
                 right,
                 left_key,
@@ -88,7 +89,7 @@ impl<LI: Ord + Clone + 'static, L: 'static> Query<LI, L> {
     }
 }
 struct JoinPlan<LI, L, RI, R, J, M> {
-    token: Rc<()>,
+    token: Rc<Token>,
     left: Query<LI, L>,
     right: Query<RI, R>,
     left_key: Selector<LI, L, J>,
@@ -104,7 +105,7 @@ impl<
     M: Mode<LI, RI, L, R>,
 > Plan for JoinPlan<LI, L, RI, R, J, M>
 {
-    fn token(&self) -> &Rc<()> {
+    fn token(&self) -> &Rc<Token> {
         &self.token
     }
     fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {

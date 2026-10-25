@@ -1,6 +1,7 @@
 use crate::Error;
 use crate::budget::Meter;
 use crate::database::Database;
+use crate::engine::Token;
 use crate::engine::{self, Lease, Linear, NodeId, Nodes, Owner, Runtime, State, Transform};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -9,7 +10,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 pub(crate) trait Plan {
-    fn token(&self) -> &Rc<()>;
+    fn token(&self) -> &Rc<Token>;
     fn validate(&self, _owner: &Rc<Owner>, _meter: &mut Meter) -> Result<(), Error> {
         Ok(())
     }
@@ -59,7 +60,7 @@ impl<I, T> Query<I, T> {
     pub(crate) fn id(&self) -> NodeId {
         engine::node_id(self.plan.token())
     }
-    pub(crate) fn source(owner: Rc<Owner>, token: Rc<()>) -> Self {
+    pub(crate) fn source(owner: Rc<Owner>, token: Rc<Token>) -> Self {
         Self {
             owner,
             plan: Rc::new(SourcePlan(token)),
@@ -88,7 +89,7 @@ impl<I: Ord + Clone + 'static, T: 'static> Query<I, T> {
         Query {
             owner: self.owner.clone(),
             plan: Rc::new(LinearPlan {
-                token: Rc::new(()),
+                token: Token::new(&self.owner),
                 parent: self,
                 transform,
             }),
@@ -96,9 +97,9 @@ impl<I: Ord + Clone + 'static, T: 'static> Query<I, T> {
         }
     }
 }
-struct SourcePlan(Rc<()>);
+struct SourcePlan(Rc<Token>);
 impl Plan for SourcePlan {
-    fn token(&self) -> &Rc<()> {
+    fn token(&self) -> &Rc<Token> {
         &self.0
     }
     fn build(
@@ -117,7 +118,7 @@ impl Plan for SourcePlan {
     }
 }
 struct LinearPlan<K, A, B> {
-    token: Rc<()>,
+    token: Rc<Token>,
     parent: Query<K, A>,
     transform: Transform<A, B>,
 }
@@ -125,7 +126,7 @@ impl<K: Ord + Clone + 'static, A: 'static, B: 'static> Plan for LinearPlan<K, A,
     fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {
         self.parent.validate(owner, meter)
     }
-    fn token(&self) -> &Rc<()> {
+    fn token(&self) -> &Rc<Token> {
         &self.token
     }
     fn build(

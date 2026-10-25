@@ -18,6 +18,8 @@ This file describes the implemented relational core and its synchronous publicat
   multiplicities, count/stats/distinct projections.
 - `ordered/`: typed order tokens, ordered index, selected windows and ordered
   snapshot/subscription facade.
+- `scheduler.rs`: reverse dependency edges, stable topological ranks and metered
+  affected-node scheduling.
 - `budget.rs`: shared per-operation logical work, input and output meters.
 - `view.rs`, `subscription.rs`, `journal.rs`: immutable snapshots, bounded shared
   delta history, cursor initialization, lag detection and resync.
@@ -70,7 +72,7 @@ order; all source, index, output and journal changes commit under one epoch.
 Initial construction costs input indexing plus full result construction. Updates
 visit changed inputs and their matching old/final fanout, with ordered-map/set
 lookup and deduplication overhead. Many-to-many fanout can be quadratic in input
-size; work/output limits stop oversized preparation before publication. Scheduler overhead remains O(active nodes).
+size; work/output limits stop oversized preparation before publication. Scheduler overhead follows reached nodes and traversed dependency edges.
 
 ## Ownership and implementation choices
 
@@ -80,7 +82,18 @@ strong tokens. Node lookup uses the private allocation address while the allocat
 is retained by strong or weak references, so old IDs cannot alias live allocations.
 IDs never escape the public interface, and no slot is reused through an unchecked
 cast. Retirement removes dead derived nodes before the next mutable operation. The
-execution-order list is filtered only when retirement actually removed nodes.
+final registered token drop queues its node identity. Mutable entries drain that
+queue and unlink reverse edges without scanning the node store. Queue borrowing ends
+before user destructors run, so destructors can enqueue cascading retirements.
+Unmaterialized and failed-build tokens never enqueue; database destruction disables
+notifications. Weak runtime tokens keep allocation identities reserved until removal.
+
+`scheduler.rs` assigns monotonic topological ranks during parent-first registration
+and stores reverse dependency edges. Capacity is checked before graph publication.
+Changed sources seed a rank-ordered deduplicating ready set; nodes with empty deltas
+stop downstream propagation while preserving any prepared index maintenance. All
+preparation and edge/node budget checks precede sparse atomic publication. Removing
+nodes unlinks their incoming edges without renumbering surviving ranks.
 
 The node store may erase types internally to own heterogeneous collections; only
 typed constructors can register and resolve them. An internal downcast failure is

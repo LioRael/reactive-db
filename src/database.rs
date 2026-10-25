@@ -28,7 +28,7 @@ pub struct Commit {
 pub struct Database {
     pub(crate) owner: Rc<Owner>,
     pub(crate) nodes: Nodes,
-    order: Vec<NodeId>,
+    scheduler: crate::scheduler::Scheduler,
     pub(crate) budget: ExecutionBudget,
     names: BTreeSet<String>,
     pub(crate) epoch: Epoch,
@@ -55,7 +55,7 @@ impl Database {
         Self {
             owner: Rc::new(Owner::new()),
             nodes: BTreeMap::new(),
-            order: Vec::new(),
+            scheduler: crate::scheduler::Scheduler::default(),
             budget: ExecutionBudget::default(),
             names: BTreeSet::new(),
             epoch: Epoch::default(),
@@ -100,7 +100,8 @@ impl Database {
         if self.names.contains(name) {
             return Err(Error::DuplicateCollection);
         }
-        let token = Rc::new(());
+        self.scheduler.reserve(1)?;
+        let token = engine::Token::new(&self.owner);
         let id = engine::node_id(&token);
         let query = Query::source(self.owner.clone(), token.clone());
         self.nodes.insert(
@@ -111,7 +112,8 @@ impl Database {
                 evaluator: None,
             }),
         );
-        self.order.push(id);
+        self.nodes[&id].register();
+        self.scheduler.register(id, Vec::new());
         self.names.insert(name.to_owned());
         Ok(Collection { query })
     }
@@ -154,14 +156,19 @@ impl Database {
         let mut new = Nodes::new();
         let mut order = Vec::new();
         query.plan.build(self, &mut new, &mut order, &mut meter)?;
+        self.scheduler.reserve(order.len())?;
         let node = new
             .get_mut(&query.id())
             .or_else(|| self.nodes.get_mut(&query.id()))
             .expect("materialized root was built or previously registered");
         engine::state_mut::<I, T>(node.as_mut()).journal =
             Some(Journal::new(options.journal, self.epoch));
+        for id in order {
+            let node = &new[&id];
+            self.scheduler.register(id, node.parents());
+            node.register();
+        }
         self.nodes.extend(new);
-        self.order.extend(order);
         Ok(LiveQuery { query })
     }
     /// Stages a cross-collection batch and publishes only its final committed state.
@@ -214,27 +221,38 @@ impl Database {
                 .ok_or(Error::ArithmeticOverflow)?,
         );
         let mut maintenance = Stages::new();
-        for id in &self.order {
+        let mut ready = crate::scheduler::Queue::new();
+        let mut commits = Vec::new();
+        for &id in stages.keys() {
+            meter.work()?;
+            commits.push(id);
+            self.scheduler.propagate(id, &mut ready, &mut meter)?;
+        }
+        while let Some((_, id)) = ready.pop_first() {
+            meter.work()?;
             let node = self
                 .nodes
-                .get(id)
-                .expect("execution order references registered nodes");
-            meter.work()?;
+                .get(&id)
+                .expect("scheduled node remains registered");
             if let Some(pending) = node.prepare(&stages, &mut meter)? {
-                stages.insert(*id, pending.changes);
+                let changed = node.has_changes(pending.changes.as_ref());
+                stages.insert(id, pending.changes);
                 if let Some(update) = pending.maintenance {
-                    maintenance.insert(*id, update);
+                    maintenance.insert(id, update);
+                }
+                commits.push(id);
+                if changed {
+                    self.scheduler.propagate(id, &mut ready, &mut meter)?;
                 }
             }
         }
-        // No fallible operation remains. Application panics during commit fail-stop.
-        for id in &self.order {
-            if let Some(pending) = stages.remove(id) {
-                self.nodes
-                    .get_mut(id)
-                    .expect("prepared node remains registered")
-                    .commit(pending, maintenance.remove(id), epoch);
-            }
+        // No fallible operation remains. Maintenance-only stages must commit too.
+        for id in commits {
+            let pending = stages.remove(&id).expect("commit has a prepared stage");
+            self.nodes
+                .get_mut(&id)
+                .expect("prepared node remains registered")
+                .commit(pending, maintenance.remove(&id), epoch);
         }
         self.epoch = epoch;
         Ok(Commit {
@@ -252,22 +270,45 @@ impl Database {
         )
     }
     fn retire(&mut self) {
-        let previous_len = self.nodes.len();
-        self.nodes.retain(|_, node| node.alive());
-        if self.nodes.len() != previous_len {
-            self.order.retain(|id| self.nodes.contains_key(id));
+        loop {
+            // Release the queue borrow before dropping user state: destructors may
+            // release other plan leases and enqueue further retirement events.
+            let retired = std::mem::take(&mut *self.owner.retired.borrow_mut());
+            if retired.is_empty() {
+                break;
+            }
+            for id in retired {
+                self.scheduler.remove(id);
+                self.nodes.remove(&id);
+            }
         }
     }
 }
 impl Drop for Database {
     fn drop(&mut self) {
         self.owner.alive.set(false);
+        self.owner.retired.take();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn database_drop_frees_pending_retirement_storage_with_surviving_handles() -> Result<(), Error>
+    {
+        let mut db = Database::new();
+        let rows = db.create_collection::<u64, i64>("rows")?;
+        let view = db.materialize(rows.query().map(|v| *v))?;
+        let owner = db.owner.clone();
+        drop(view);
+        assert_eq!(owner.retired.borrow().len(), 1);
+        drop(db);
+        assert_eq!(owner.retired.borrow().capacity(), 0);
+        assert_eq!(rows.get(&Database::new(), &0), Err(Error::DatabaseDropped));
+        Ok(())
+    }
 
     #[test]
     fn exhausted_epoch_rejects_before_any_source_or_view_commit() -> Result<(), Error> {

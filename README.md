@@ -3,7 +3,8 @@
 Experimental native Rust reactive collections. M0–M3 are implemented: typed
 collections, atomic in-memory write batches, incremental filter/map, inner/left joins, grouped count/stats, distinct values,
 sort/top-k, ordered deltas and bounded subscriptions. Execution budgets reject
-excessive batches before publication. The planned relational core MVP is implemented.
+excessive batches before publication. Writes propagate only through affected query
+dependencies, with empty deltas stopping downstream work. The planned relational core MVP is implemented.
 
 Zero runtime dependencies. Safe Rust. No JS, FFI, serde requirement, background thread,
 async runtime or connection to either original project. Rust 1.88+; development
@@ -127,3 +128,7 @@ graph construction/drop; on systems with `ps` it also prints RSS in KiB.
 See [audit and measurement results](docs/audit-performance.md) for methodology,
 regressions fixed, measured results and remaining limits. Benchmark dependencies
 are not linked into applications that depend on the library.
+
+Run `cargo bench --bench scheduler --locked` to compare unrelated graph width,
+empty writes, pruned propagation and fully affected fanout. See the
+[scheduler follow-up](docs/scheduler-performance.md) for before/after results.

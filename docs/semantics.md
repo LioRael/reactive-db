@@ -28,8 +28,12 @@ mutually committed. No application subscriber callbacks run during commit.
 Filter/map use the committed old output and compute only a new/replaced payload.
 Removing a cached row does not rerun its closures. Whole-table cloning is absent;
 staging and output allocation are proportional to touched identities through the
-active graph. The scheduler still visits active graph nodes, so per-write cost
-includes O(active nodes), even when few nodes have affected input.
+affected graph. Writes visit changed sources and propagate through reverse dependency
+edges only while a parent emits changes. A rank-ordered queue evaluates each reached
+node once after its affected parents. Empty-output operator maintenance still commits.
+Scheduling costs depend on reached nodes/edges plus ordered-map/queue lookups, rather
+than scanning all registered nodes; these lookups still depend logarithmically on
+graph size. Sparse commit lists also avoid an all-node publication pass.
 
 ## Joins
 
@@ -140,6 +144,9 @@ internal graph nodes, not just subscribed roots. Work meters plan/node visits,
 rows/candidates (including removed members skipped by join overlays) and bounded
 window/extrema scans, excluding tree comparisons. Exact work counts are diagnostic
 and may change with implementation; the configured limit is always enforced.
+Scheduling charges each reached node before evaluation and each dependency edge
+before queue insertion, including converging edges; failed scheduling publishes nothing.
+Lease retirement is lifecycle cleanup outside this logical execution budget.
 Initial scans use the work limit; input-change limits apply only to writes.
 
 A zero limit forbids that work. BudgetExceeded is a normal pre-commit error;

@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-69 tests pass: 56 unit/integration and 13 rustdoc tests, including 10 compile-fail
+78 tests pass: 65 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -67,8 +67,8 @@ The planned average API is made fallible as Option<f64> only to handle manually
 constructed empty StatsI64 values; actual query groups are always nonempty. Exact
 sum/count fields remain available. A public generic Reducer trait stays deferred.
 
-Owner handles are !Send/!Sync, execution is synchronous, scheduling visits active
-nodes, and ordered tree/window comparisons add logarithmic overhead. Cloned ordered
+Owner handles are !Send/!Sync, execution is synchronous, scheduling follows affected
+dependency edges, and ordered tree/window comparisons add logarithmic overhead. Cloned ordered
 plans share indexes; separately created windows currently own separate indexes.
 Top-k retains a full input index. Budget limits count work/transitions rather than
 bytes, elapsed time or cumulative retained database memory. Arbitrary user code
@@ -81,3 +81,7 @@ recursive queries and public arbitrary reducers are not implemented.
 No write operation from this implementation targeted livequery or tanstack-db-rs.
 Those projects were not merged, reset or deployed. Other concurrent tasks may still
 change them independently; this task does not claim global directory immutability.
+
+The scheduler follow-up replaces full-node scheduling, publication and retirement
+scans with reverse edges, a topological ready queue and lease retirement events.
+See [scheduler performance](scheduler-performance.md) for regressions and measurements.

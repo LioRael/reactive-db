@@ -1,6 +1,7 @@
 use super::runtime::OrderNode;
 use super::types::{OrderKey, OrderedRow};
 use crate::budget::Meter;
+use crate::engine::Token;
 use crate::engine::{self, NodeId, Nodes, Owner};
 use crate::query::Plan;
 use crate::{Database, Error, Query};
@@ -17,7 +18,7 @@ pub struct OrderedQuery<I, T, S> {
     parent: Query<I, T>,
     selector: Selector<T, S>,
     limit: Option<usize>,
-    token: Rc<()>,
+    token: Rc<Token>,
 }
 impl<I, T, S> Clone for OrderedQuery<I, T, S> {
     fn clone(&self) -> Self {
@@ -44,10 +45,10 @@ impl<I: Ord + Clone + 'static, T: 'static> Query<I, T> {
         key: impl Fn(&T) -> S + 'static,
     ) -> OrderedQuery<I, T, S> {
         OrderedQuery {
+            token: Token::new(&self.owner),
             parent: self,
             selector: Rc::new(key),
             limit: None,
-            token: Rc::new(()),
         }
     }
 }
@@ -56,7 +57,7 @@ impl<I: Ord + Clone + 'static, T: 'static, S: Ord + Clone + 'static> OrderedQuer
     /// Updates cost changed-index work plus the selected window, not a full-input sort.
     pub fn take(mut self, k: usize) -> Self {
         self.limit = Some(self.limit.map_or(k, |old| old.min(k)));
-        self.token = Rc::new(());
+        self.token = Token::new(&self.parent.owner);
         self
     }
     pub(super) fn finish(self) -> Finished<I, T, S> {
@@ -74,7 +75,7 @@ impl<I: Ord + Clone + 'static, T: 'static, S: Ord + Clone + 'static> OrderedQuer
 impl<I: Ord + Clone + 'static, T: 'static, S: Ord + Clone + 'static> Plan
     for OrderedQuery<I, T, S>
 {
-    fn token(&self) -> &Rc<()> {
+    fn token(&self) -> &Rc<Token> {
         &self.token
     }
     fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {
