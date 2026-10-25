@@ -1,3 +1,4 @@
+use crate::budget::Meter;
 use crate::journal::Journal;
 use crate::{Change, Epoch, Error};
 use std::any::Any;
@@ -61,15 +62,17 @@ impl<K: Ord + Clone, T> State<K, T> {
             journal: None,
         }
     }
-    fn changes(&self, patch: Patch<K, T>) -> Pending<K, T> {
-        patch
-            .into_iter()
-            .filter_map(|(key, after)| {
-                let before = self.rows.get(&key).cloned();
-                Change::between(key, before, after)
-            })
-            .collect::<Vec<_>>()
-            .into()
+    fn changes(&self, patch: Patch<K, T>, meter: &mut Meter) -> Result<Pending<K, T>, Error> {
+        let mut changes = Vec::new();
+        for (key, after) in patch {
+            meter.work()?;
+            if let Some(change) = Change::between(key.clone(), self.rows.get(&key).cloned(), after)
+            {
+                meter.output()?;
+                changes.push(change);
+            }
+        }
+        Ok(changes.into())
     }
     pub(crate) fn apply(&mut self, changes: Pending<K, T>, epoch: Epoch) {
         for change in changes.iter() {
@@ -94,8 +97,12 @@ pub(crate) trait Node {
     fn state(&self) -> &dyn Any;
     fn state_mut(&mut self) -> &mut dyn Any;
     fn alive(&self) -> bool;
-    fn source_changes(&self, patch: Box<dyn Any>) -> Box<dyn Any>;
-    fn prepare(&self, stages: &Stages) -> Option<Prepared>;
+    fn ordered_index(&self) -> Option<&dyn Any> {
+        None
+    }
+    fn source_changes(&self, patch: Box<dyn Any>, meter: &mut Meter)
+    -> Result<Box<dyn Any>, Error>;
+    fn prepare(&self, stages: &Stages, meter: &mut Meter) -> Result<Option<Prepared>, Error>;
     fn has_changes(&self, pending: &dyn Any) -> bool;
     fn commit(&mut self, pending: Box<dyn Any>, maintenance: Option<Box<dyn Any>>, epoch: Epoch);
 }
@@ -113,7 +120,12 @@ impl Lease {
     }
 }
 pub(crate) trait Evaluate<K, T> {
-    fn prepare(&self, current: &State<K, T>, stages: &Stages) -> Option<Pending<K, T>>;
+    fn prepare(
+        &self,
+        current: &State<K, T>,
+        stages: &Stages,
+        meter: &mut Meter,
+    ) -> Result<Option<Pending<K, T>>, Error>;
 }
 pub(crate) struct Runtime<K, T> {
     pub state: State<K, T>,
@@ -130,20 +142,26 @@ impl<K: Ord + Clone + 'static, T: 'static> Node for Runtime<K, T> {
     fn alive(&self) -> bool {
         self.lease.alive()
     }
-    fn source_changes(&self, patch: Box<dyn Any>) -> Box<dyn Any> {
+    fn source_changes(
+        &self,
+        patch: Box<dyn Any>,
+        meter: &mut Meter,
+    ) -> Result<Box<dyn Any>, Error> {
         let patch = *patch
             .downcast::<Patch<K, T>>()
             .expect("typed source patch matches its registered node");
-        Box::new(self.state.changes(patch))
+        Ok(Box::new(self.state.changes(patch, meter)?))
     }
-    fn prepare(&self, stages: &Stages) -> Option<Prepared> {
-        self.evaluator
-            .as_ref()?
-            .prepare(&self.state, stages)
+    fn prepare(&self, stages: &Stages, meter: &mut Meter) -> Result<Option<Prepared>, Error> {
+        let Some(evaluator) = &self.evaluator else {
+            return Ok(None);
+        };
+        Ok(evaluator
+            .prepare(&self.state, stages, meter)?
             .map(|pending| Prepared {
                 changes: Box::new(pending),
                 maintenance: None,
-            })
+            }))
     }
     fn has_changes(&self, pending: &dyn Any) -> bool {
         !pending
@@ -169,20 +187,29 @@ pub(crate) struct Linear<K, A, B> {
     pub marker: std::marker::PhantomData<fn() -> K>,
 }
 impl<K: Ord + Clone + 'static, A: 'static, B: 'static> Evaluate<K, B> for Linear<K, A, B> {
-    fn prepare(&self, current: &State<K, B>, stages: &Stages) -> Option<Pending<K, B>> {
-        let input = stages
-            .get(&self.parent)?
+    fn prepare(
+        &self,
+        current: &State<K, B>,
+        stages: &Stages,
+        meter: &mut Meter,
+    ) -> Result<Option<Pending<K, B>>, Error> {
+        let Some(input) = stages.get(&self.parent) else {
+            return Ok(None);
+        };
+        let input = input
             .downcast_ref::<Pending<K, A>>()
-            .expect("linear operator input has its declared type");
-        let changes: Vec<_> = input
-            .iter()
-            .filter_map(|change| {
-                let before = current.rows.get(change.id()).cloned();
-                let after = change.after().and_then(|row| (self.transform)(row));
-                Change::between(change.id().clone(), before, after)
-            })
-            .collect();
-        (!changes.is_empty()).then(|| changes.into())
+            .expect("linear input has declared type");
+        let mut changes = Vec::new();
+        for change in input.iter() {
+            meter.work()?;
+            let before = current.rows.get(change.id()).cloned();
+            let after = change.after().and_then(|row| (self.transform)(row));
+            if let Some(change) = Change::between(change.id().clone(), before, after) {
+                meter.output()?;
+                changes.push(change);
+            }
+        }
+        Ok((!changes.is_empty()).then(|| changes.into()))
     }
 }
 

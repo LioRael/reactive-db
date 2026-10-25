@@ -1,6 +1,7 @@
 use super::index::{Index, Selector};
 use super::output::{Inner, Left, Mode};
 use super::runtime::JoinNode;
+use crate::budget::Meter;
 use crate::engine::{self, NodeId, Nodes, Owner};
 use crate::query::Plan;
 use crate::{Database, Error, Joined, LeftJoined, Query};
@@ -106,17 +107,24 @@ impl<
     fn token(&self) -> &Rc<()> {
         &self.token
     }
-    fn validate(&self, owner: &Rc<Owner>) -> Result<(), Error> {
-        self.left.validate(owner)?;
-        self.right.validate(owner)
+    fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {
+        self.left.validate(owner, meter)?;
+        self.right.validate(owner, meter)
     }
-    fn build(&self, db: &Database, new: &mut Nodes, order: &mut Vec<NodeId>) {
+    fn build(
+        &self,
+        db: &Database,
+        new: &mut Nodes,
+        order: &mut Vec<NodeId>,
+        meter: &mut Meter,
+    ) -> Result<(), Error> {
+        meter.work()?;
         let id = engine::node_id(&self.token);
         if db.nodes.contains_key(&id) || new.contains_key(&id) {
-            return;
+            return Ok(());
         }
-        self.left.plan.build(db, new, order);
-        self.right.plan.build(db, new, order);
+        self.left.plan.build(db, new, order, meter)?;
+        self.right.plan.build(db, new, order, meter)?;
         let left_node = new
             .get(&self.left.id())
             .or_else(|| db.nodes.get(&self.left.id()))
@@ -128,19 +136,23 @@ impl<
         let left = Index::new(
             &engine::state::<LI, L>(left_node.as_ref()).rows,
             self.left_key.clone(),
-        );
+            meter,
+        )?;
         let right = Index::new(
             &engine::state::<RI, R>(right_node.as_ref()).rows,
             self.right_key.clone(),
-        );
+            meter,
+        )?;
         let node = JoinNode::<LI, L, RI, R, J, M>::new(
             Rc::downgrade(&self.token),
             self.left.id(),
             self.right.id(),
             left,
             right,
-        );
+            meter,
+        )?;
         new.insert(id, Box::new(node));
         order.push(id);
+        Ok(())
     }
 }

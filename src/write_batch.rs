@@ -1,3 +1,4 @@
+use crate::budget::Meter;
 use crate::engine::{Patch, Stages};
 use crate::{Collection, Database, Error};
 use std::cell::Cell;
@@ -12,6 +13,7 @@ use std::sync::Arc;
 pub struct WriteBatch<'db> {
     db: &'db Database,
     pub(crate) patches: Stages,
+    pub(crate) meter: Meter,
     pub(crate) invalid: Cell<bool>,
 }
 impl fmt::Debug for WriteBatch<'_> {
@@ -27,6 +29,7 @@ impl<'db> WriteBatch<'db> {
         Self {
             db,
             patches: Stages::new(),
+            meter: Meter::new(db.budget),
             invalid: Cell::new(false),
         }
     }
@@ -76,7 +79,7 @@ impl<'db> WriteBatch<'db> {
         if self.get(collection, &key)?.is_some() {
             return self.invalidate(Err(Error::DuplicateKey));
         }
-        self.record(collection, key, Some(Arc::new(value)));
+        self.record(collection, key, Some(Arc::new(value)))?;
         Ok(())
     }
     /// Replaces an existing payload without requiring the payload to implement Clone.
@@ -93,7 +96,7 @@ impl<'db> WriteBatch<'db> {
         if self.get(collection, &key)?.is_none() {
             return self.invalidate(Err(Error::MissingKey));
         }
-        self.record(collection, key, Some(Arc::new(value)));
+        self.record(collection, key, Some(Arc::new(value)))?;
         Ok(())
     }
     /// Removes a key that exists in the current staged state.
@@ -109,7 +112,7 @@ impl<'db> WriteBatch<'db> {
         if self.get(collection, key)?.is_none() {
             return self.invalidate(Err(Error::MissingKey));
         }
-        self.record(collection, key.clone(), None);
+        self.record(collection, key.clone(), None)?;
         Ok(())
     }
     fn record<K: Ord + Clone + 'static, T: 'static>(
@@ -117,12 +120,16 @@ impl<'db> WriteBatch<'db> {
         collection: &Collection<K, T>,
         key: K,
         value: Option<Arc<T>>,
-    ) {
+    ) -> Result<(), Error> {
+        if let Err(error) = self.meter.input() {
+            return self.invalidate(Err(error));
+        }
         self.patches
             .entry(collection.query.id())
             .or_insert_with(|| Box::new(BTreeMap::<K, Option<Arc<T>>>::new()))
             .downcast_mut::<Patch<K, T>>()
             .expect("source patch has its handle's type")
             .insert(key, value);
+        Ok(())
     }
 }

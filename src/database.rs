@@ -1,6 +1,8 @@
+use crate::budget::Meter;
 use crate::engine::{self, Lease, NodeId, Nodes, Owner, PanicGuard, Runtime, Stages, State};
 use crate::journal::Journal;
 use crate::{Collection, Epoch, Error, LiveQuery, Query, ViewOptions, WriteBatch};
+use crate::{ExecutionBudget, ExecutionStats};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::rc::Rc;
@@ -13,6 +15,8 @@ pub struct Commit {
     pub epoch: Epoch,
     /// Whether this batch changed any source identity or payload.
     pub changed: bool,
+    /// Logical work consumed by this successful batch.
+    pub stats: ExecutionStats,
 }
 
 /// A single-owner database with synchronous incremental publication and no runtime dependency.
@@ -25,6 +29,7 @@ pub struct Database {
     pub(crate) owner: Rc<Owner>,
     pub(crate) nodes: Nodes,
     order: Vec<NodeId>,
+    pub(crate) budget: ExecutionBudget,
     names: BTreeSet<String>,
     pub(crate) epoch: Epoch,
 }
@@ -51,9 +56,27 @@ impl Database {
             owner: Rc::new(Owner::new()),
             nodes: BTreeMap::new(),
             order: Vec::new(),
+            budget: ExecutionBudget::default(),
             names: BTreeSet::new(),
             epoch: Epoch::default(),
         }
+    }
+    /// Creates a database with explicit per-operation execution limits.
+    #[must_use]
+    pub fn with_budget(budget: ExecutionBudget) -> Self {
+        {
+            let mut db = Self::new();
+            db.budget = budget;
+            db
+        }
+    }
+    /// Changes limits for subsequent operations; rejected writes may be retried.
+    /// # Errors
+    /// Returns an error if the database is poisoned.
+    pub fn set_execution_budget(&mut self, budget: ExecutionBudget) -> Result<(), Error> {
+        self.owner.check(&self.owner)?;
+        self.budget = budget;
+        Ok(())
     }
     /// Reads the current committed revision.
     /// # Errors
@@ -94,7 +117,7 @@ impl Database {
     }
     /// Materializes a query using finite default journal capacities.
     /// # Errors
-    /// Returns ownership, poisoned-database, or shared-view configuration errors.
+    /// Returns ownership, budget, arithmetic, poison or shared-view configuration errors.
     /// # Panics
     /// Query closures or key comparisons may panic; subsequent database access fails.
     pub fn materialize<I: Ord + Clone + 'static, T: 'static>(
@@ -108,7 +131,7 @@ impl Database {
     /// Initial construction scans its input once. Clones share nodes; independently
     /// constructed closures are never compared for semantic equivalence.
     /// # Errors
-    /// Returns ownership, poisoned-database, or [`Error::ViewOptionsConflict`] errors.
+    /// Returns ownership, budget, arithmetic, poison or [`Error::ViewOptionsConflict`] errors.
     /// # Panics
     /// Query closures, comparisons or retired destructors may panic and poison access.
     pub fn materialize_with_options<I: Ord + Clone + 'static, T: 'static>(
@@ -116,7 +139,8 @@ impl Database {
         query: Query<I, T>,
         options: ViewOptions,
     ) -> Result<LiveQuery<I, T>, Error> {
-        query.validate(&self.owner)?;
+        let mut meter = Meter::new(self.budget);
+        query.validate(&self.owner, &mut meter)?;
         let _guard = PanicGuard(self.owner.clone());
         self.retire();
         if let Some(node) = self.nodes.get(&query.id())
@@ -129,7 +153,7 @@ impl Database {
         }
         let mut new = Nodes::new();
         let mut order = Vec::new();
-        query.plan.build(self, &mut new, &mut order);
+        query.plan.build(self, &mut new, &mut order, &mut meter)?;
         let node = new
             .get_mut(&query.id())
             .or_else(|| self.nodes.get_mut(&query.id()))
@@ -146,7 +170,7 @@ impl Database {
     /// the sparse overlay, without cloning entire tables. Even a swallowed batch
     /// method error invalidates the whole batch. No subscriber callback runs here.
     /// # Errors
-    /// Returns validation, batch-operation, ownership, poison, or revision overflow errors.
+    /// Returns validation, batch-operation, ownership, budget, poison or arithmetic errors.
     /// # Panics
     /// Application closures, key comparisons or destructors may panic. Unwinding
     /// propagates and permanently poisons the database instead of resuming it.
@@ -157,13 +181,13 @@ impl Database {
         self.owner.check(&self.owner)?;
         let _guard = PanicGuard(self.owner.clone());
         self.retire();
-        let patches = {
+        let (patches, mut meter) = {
             let mut batch = WriteBatch::new(self);
             f(&mut batch)?;
             if batch.invalid.get() {
                 return Err(Error::InvalidBatch);
             }
-            batch.patches
+            (batch.patches, batch.meter)
         };
         let mut stages = Stages::new();
         for (id, patch) in patches {
@@ -171,7 +195,7 @@ impl Database {
                 .nodes
                 .get(&id)
                 .expect("batch source remains registered");
-            let changes = node.source_changes(patch);
+            let changes = node.source_changes(patch, &mut meter)?;
             if node.has_changes(changes.as_ref()) {
                 stages.insert(id, changes);
             }
@@ -180,6 +204,7 @@ impl Database {
             return Ok(Commit {
                 epoch: self.epoch,
                 changed: false,
+                stats: meter.stats,
             });
         }
         let epoch = Epoch(
@@ -194,7 +219,8 @@ impl Database {
                 .nodes
                 .get(id)
                 .expect("execution order references registered nodes");
-            if let Some(pending) = node.prepare(&stages) {
+            meter.work()?;
+            if let Some(pending) = node.prepare(&stages, &mut meter)? {
                 stages.insert(*id, pending.changes);
                 if let Some(update) = pending.maintenance {
                     maintenance.insert(*id, update);
@@ -214,6 +240,7 @@ impl Database {
         Ok(Commit {
             epoch,
             changed: true,
+            stats: meter.stats,
         })
     }
     pub(crate) fn state<K: 'static, T: 'static>(&self, id: NodeId) -> &State<K, T> {

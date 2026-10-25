@@ -1,4 +1,5 @@
 use crate::engine::Pending;
+use crate::{Error, budget::Meter};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -19,13 +20,18 @@ pub(super) struct Patch<I, T, J> {
     removed: BTreeMap<J, BTreeSet<I>>,
 }
 impl<I: Ord + Clone, T, J: Ord + Clone> Index<I, T, J> {
-    pub fn new(rows: &BTreeMap<I, Arc<T>>, select: Selector<I, T, J>) -> Self {
+    pub fn new(
+        rows: &BTreeMap<I, Arc<T>>,
+        select: Selector<I, T, J>,
+        meter: &mut Meter,
+    ) -> Result<Self, Error> {
         let mut index = Self {
             rows: BTreeMap::new(),
             buckets: BTreeMap::new(),
             select,
         };
         for (id, value) in rows {
+            meter.work()?;
             let key = (index.select)(id, value);
             index
                 .buckets
@@ -40,18 +46,23 @@ impl<I: Ord + Clone, T, J: Ord + Clone> Index<I, T, J> {
                 },
             );
         }
-        index
+        Ok(index)
     }
     pub fn members(&self, key: &J) -> impl Iterator<Item = &I> {
         self.buckets.get(key).into_iter().flatten()
     }
-    pub fn stage(&self, changes: Option<&Pending<I, T>>) -> Patch<I, T, J> {
+    pub fn stage(
+        &self,
+        changes: Option<&Pending<I, T>>,
+        meter: &mut Meter,
+    ) -> Result<Patch<I, T, J>, Error> {
         let mut patch = Patch {
             rows: BTreeMap::new(),
             added: BTreeMap::new(),
             removed: BTreeMap::new(),
         };
         for change in changes.into_iter().flat_map(|c| c.iter()) {
+            meter.work()?;
             let id = change.id();
             if let Some(old) = self.rows.get(id) {
                 patch
@@ -74,7 +85,7 @@ impl<I: Ord + Clone, T, J: Ord + Clone> Index<I, T, J> {
             });
             patch.rows.insert(id.clone(), entry);
         }
-        patch
+        Ok(patch)
     }
     pub fn apply(&mut self, patch: Patch<I, T, J>) {
         for (key, ids) in patch.removed {

@@ -2,6 +2,7 @@ use super::index::{Index, Patch};
 use super::output::Mode;
 use crate::engine::{Node, NodeId, Pending, Prepared, Stages, State};
 use crate::{Change, Epoch};
+use crate::{Error, budget::Meter};
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Weak;
@@ -40,16 +41,21 @@ impl<
         right_parent: NodeId,
         left: Index<LI, L, J>,
         right: Index<RI, R, J>,
-    ) -> Self {
+        meter: &mut Meter,
+    ) -> Result<Self, Error> {
         let mut rows = BTreeMap::new();
         for (li, l) in &left.rows {
+            meter.work()?;
             let mut matches = right.members(&l.key).peekable();
             if matches.peek().is_none()
                 && let Some(id) = M::id(li, None)
             {
+                meter.output()?;
                 rows.insert(id, Arc::new(M::value(l.value.clone(), None)));
             }
             for ri in matches {
+                meter.work()?;
+                meter.output()?;
                 let r = right
                     .rows
                     .get(ri)
@@ -61,14 +67,14 @@ impl<
                 );
             }
         }
-        Self {
+        Ok(Self {
             state: State::new(rows),
             token,
             left_parent,
             right_parent,
             left,
             right,
-        }
+        })
     }
 }
 fn input<I: 'static, T: 'static>(stages: &Stages, id: NodeId) -> Option<&Pending<I, T>> {
@@ -94,7 +100,11 @@ impl<
     fn alive(&self) -> bool {
         self.token.strong_count() > 0
     }
-    fn source_changes(&self, _patch: Box<dyn Any>) -> Box<dyn Any> {
+    fn source_changes(
+        &self,
+        _patch: Box<dyn Any>,
+        _meter: &mut Meter,
+    ) -> Result<Box<dyn Any>, Error> {
         unreachable!("a join cannot be a writable source")
     }
     fn has_changes(&self, pending: &dyn Any) -> bool {
@@ -103,31 +113,29 @@ impl<
             .expect("join pending output has its declared type")
             .is_empty()
     }
-    fn prepare(&self, stages: &Stages) -> Option<Prepared> {
+    fn prepare(&self, stages: &Stages, meter: &mut Meter) -> Result<Option<Prepared>, Error> {
         let left_changes = input::<LI, L>(stages, self.left_parent);
         let right_changes = input::<RI, R>(stages, self.right_parent);
         if left_changes.is_none_or(|c| c.is_empty()) && right_changes.is_none_or(|c| c.is_empty()) {
-            return None;
+            return Ok(None);
         }
-        let left_patch = self.left.stage(left_changes);
-        let right_patch = self.right.stage(right_changes);
+        let left_patch = self.left.stage(left_changes, meter)?;
+        let right_patch = self.right.stage(right_changes, meter)?;
         let left = self.left.overlay(&left_patch);
         let right = self.right.overlay(&right_patch);
         let mut candidates = BTreeSet::new();
         for li in left_patch.rows.keys() {
             if let Some(old) = self.left.rows.get(li) {
-                candidates.extend(
-                    self.right
-                        .members(&old.key)
-                        .map(|ri| (li.clone(), Some(ri.clone()))),
-                );
+                for ri in self.right.members(&old.key) {
+                    meter.work()?;
+                    candidates.insert((li.clone(), Some(ri.clone())));
+                }
             }
             if let Some(new) = left.get(li) {
-                candidates.extend(
-                    right
-                        .members(&new.key)
-                        .map(|ri| (li.clone(), Some(ri.clone()))),
-                );
+                for ri in right.members(&new.key) {
+                    meter.work()?;
+                    candidates.insert((li.clone(), Some(ri.clone())));
+                }
             }
             if M::OUTER {
                 candidates.insert((li.clone(), None));
@@ -145,6 +153,7 @@ impl<
                 .into_iter()
                 .flat_map(|new| left.members(&new.key));
             for li in old_left.chain(new_left) {
+                meter.work()?;
                 candidates.insert((li.clone(), Some(ri.clone())));
                 if M::OUTER {
                     candidates.insert((li.clone(), None));
@@ -153,38 +162,42 @@ impl<
         }
         // Pair identities deduplicate the two sides, including the simultaneous
         // delta cross term. Final overlays prevent transient outer placeholders.
-        let changes: Vec<_> = candidates
-            .into_iter()
-            .filter_map(|(li, ri)| {
-                let id = M::id(&li, ri.as_ref())?;
-                let before = self.state.rows.get(&id).cloned();
-                let desired = left.get(&li).and_then(|l| match &ri {
-                    Some(ri) => right
-                        .get(ri)
-                        .filter(|r| l.key == r.key)
-                        .map(|r| (&l.value, Some(&r.value))),
-                    None => (!right.has_members(&l.key)).then_some((&l.value, None)),
-                });
-                let after = desired.map(|(l, r)| {
-                    if let Some(existing) = &before
-                        && M::unchanged(existing, l, r)
-                    {
-                        return existing.clone();
-                    }
-                    Arc::new(M::value(l.clone(), r.cloned()))
-                });
-                Change::between(id, before, after)
-            })
-            .collect();
+        let mut changes = Vec::new();
+        for (li, ri) in candidates {
+            meter.work()?;
+            let Some(id) = M::id(&li, ri.as_ref()) else {
+                continue;
+            };
+            let before = self.state.rows.get(&id).cloned();
+            let desired = left.get(&li).and_then(|l| match &ri {
+                Some(ri) => right
+                    .get(ri)
+                    .filter(|r| l.key == r.key)
+                    .map(|r| (&l.value, Some(&r.value))),
+                None => (!right.has_members(&l.key)).then_some((&l.value, None)),
+            });
+            let after = desired.map(|(l, r)| {
+                if let Some(existing) = &before
+                    && M::unchanged(existing, l, r)
+                {
+                    return existing.clone();
+                }
+                Arc::new(M::value(l.clone(), r.cloned()))
+            });
+            if let Some(change) = Change::between(id, before, after) {
+                meter.output()?;
+                changes.push(change);
+            }
+        }
         let pending: OutputPending<LI, RI, L, R, M> = changes.into();
         // Unmatched input updates must commit their indexes even with no output.
-        Some(Prepared {
+        Ok(Some(Prepared {
             changes: Box::new(pending),
             maintenance: Some(Box::new(IndexUpdates {
                 left: left_patch,
                 right: right_patch,
             })),
-        })
+        }))
     }
     fn commit(&mut self, pending: Box<dyn Any>, maintenance: Option<Box<dyn Any>>, epoch: Epoch) {
         let updates = *maintenance

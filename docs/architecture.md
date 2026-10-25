@@ -1,7 +1,6 @@
-# M0–M2 implementation architecture
+# M0–M3 implementation architecture
 
-The accepted full design includes future aggregate/order operators. This file
-describes the implemented slice only, not those planned capabilities.
+This file describes the implemented relational core and its synchronous publication contract.
 
 - `database.rs`: unique owner, instance checks, graph registration, lease retirement,
   synchronous write preparation and publication.
@@ -15,6 +14,11 @@ describes the implemented slice only, not those planned capabilities.
   dynamic JSON value model is used.
 - `join/`: typed two-parent plans, sparse side indexes, pair reconciliation and
   inner/left output types.
+- `aggregate.rs`: cached member contributions, sparse per-group count/sum/value
+  multiplicities, count/stats/distinct projections.
+- `ordered/`: typed order tokens, ordered index, selected windows and ordered
+  snapshot/subscription facade.
+- `budget.rs`: shared per-operation logical work, input and output meters.
 - `view.rs`, `subscription.rs`, `journal.rs`: immutable snapshots, bounded shared
   delta history, cursor initialization, lag detection and resync.
 - `change.rs`: typed row transitions and database-local epochs.
@@ -62,7 +66,7 @@ order; all source, index, output and journal changes commit under one epoch.
 Initial construction costs input indexing plus full result construction. Updates
 visit changed inputs and their matching old/final fanout, with ordered-map/set
 lookup and deduplication overhead. Many-to-many fanout can be quadratic in input
-size and is not capped in M2. Scheduler overhead remains O(active nodes).
+size; work/output limits stop oversized preparation before publication. Scheduler overhead remains O(active nodes).
 
 ## Ownership and implementation choices
 
@@ -84,3 +88,50 @@ are explicit design choices, not accidental Clone/Send requirements on user rows
 Future work should extend operator-specific staged state rather than reverting to
 whole-table clone-on-write. It should not introduce JS opcode dispatch, upstream
 runtime identity or a public generic backend plugin framework.
+
+## Groups and distinct
+
+The member cache stores only identity → (group key, i64 contribution). A group
+stores count, checked i128 sum and an ordered value → multiplicity map. Preparation
+accumulates sparse signed count/sum/value differences for touched groups. It then
+resolves final statistics against the committed state, skipping only retracted
+extreme values when finding min/max. Untouched groups and member payloads are not
+cloned or rescanned. A count/distinct query uses zero-valued contributions.
+Distinct projects the group identity itself and suppresses unchanged multiplicity
+updates; statistics/count suppress equal output values. Group membership patches
+still commit when visible output is unchanged.
+
+## Ordered state and top-k
+
+An identity → old token cache and `(sort_key, identity)` → Arc payload index allow
+sparse retractions and additions. Full-sort writes compare only touched identities.
+Top-k merges the committed sorted index (excluding staged removals) with sorted
+staged additions, stopping at W rows. Only old/new window identities are compared.
+There is no full-input snapshot or sorted Vec rebuild during writes. Tree lookup
+and window-map/dedup comparisons add logarithmic factors; logical visited rows are
+bounded by changed inputs plus W, excluding unavoidable graph scheduling.
+
+Full snapshots iterate the existing index; top-k snapshots stop at W. Snapshot
+construction is O(result size). Ordered journals use typed cached OrderedRow
+transitions internally; poll converts just the delivered batch into OrderedChange,
+cloning keys and Arc references without evaluating selectors. Identity tie-breaks
+make equal sort keys deterministic. `take` creates a new plan identity; clones of
+the same ordered plan share one index, while separately derived windows currently
+own separate indexes. Ordering is terminal: no implicit unordered join/group API
+is exposed on OrderedQuery.
+
+## Execution budgets and failure atomicity
+
+Preparation and plan construction now return Result. One meter spans a write or
+materialization, including nested plans. Inputs count successful staged mutation
+operations before coalescing. Outputs count source/derived transitions (or initial
+constructed result rows). Work counts logical plan/node/row visits and join
+candidates, plus aggregate extrema and window work; it does not count BTree
+comparisons, cleanup, arbitrary callbacks or payload bytes.
+
+Limits are checked incrementally while producing candidates/results. Failed
+materialization discards temporary nodes without registering a partial graph.
+Failed writes discard every source/operator patch, retain journals/epoch and can
+be retried. Raising a budget does not execute or replay a previously failed batch.
+Existing materialized view reuse does not reconstruct or charge output rows.
+Panic poisoning remains separate from normal budget/arithmetic rejection.

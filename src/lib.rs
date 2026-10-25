@@ -1,4 +1,4 @@
-//! Typed collections, synchronous incremental filter/map/join queries, and bounded delta subscriptions.
+//! Typed incremental relational queries, ordered windows, atomic writes and bounded delta subscriptions.
 //!
 //! Payloads need not implement `Clone`, `Eq`, `Ord`, or serialization. Keys require
 //! `Ord + Clone`. Payloads and query closures must remain logically immutable and
@@ -63,6 +63,50 @@
 //! assert_send::<reactive_db::Subscription<u64, String>>();
 //! ```
 
+//! Group statistics and ordered windows compose without an async runtime:
+//! ```
+//! # fn main() -> Result<(), reactive_db::Error> {
+//! use reactive_db::Database;
+//! use std::cmp::Reverse;
+//! let mut db = Database::new();
+//! let rows = db.create_collection::<u64, (u64, i64)>("scores")?;
+//! let stats = rows.query().group_by(|v| v.0).stats_i64(|v| v.1);
+//! let top = db.materialize_ordered(stats.sort_by_key(|s| Reverse(s.sum)).take(3))?;
+//! db.write(|tx| { tx.insert(&rows, 1, (7, 10))?; tx.insert(&rows, 2, (7, 20)) })?;
+//! assert_eq!(top.snapshot(&db)?.rows[0].value.sum, 30);
+//! # Ok(())
+//! # }
+//! ```
+//! Floating sort keys require an explicit total-order policy:
+//! ```compile_fail
+//! # fn main() -> Result<(), reactive_db::Error> {
+//! let mut db = reactive_db::Database::new();
+//! let rows = db.create_collection::<u64, f64>("rows")?;
+//! let ordered = rows.query().sort_by_key(|v| *v);
+//! # Ok(())
+//! # }
+//! ```
+//! Ordered plans do not expose unordered transformations:
+//! ```compile_fail
+//! # fn main() -> Result<(), reactive_db::Error> {
+//! let mut db = reactive_db::Database::new();
+//! let rows = db.create_collection::<u64, i64>("rows")?;
+//! let query = rows.query().sort_by_key(|v| *v).group_by(|v| *v);
+//! # Ok(())
+//! # }
+//! ```
+//! Statistics require i64 contributions:
+//! ```compile_fail
+//! # fn main() -> Result<(), reactive_db::Error> {
+//! let mut db = reactive_db::Database::new();
+//! let rows = db.create_collection::<u64, String>("rows")?;
+//! let query = rows.query().group_by(|_| ()).stats_i64(|v| v.clone());
+//! # Ok(())
+//! # }
+//! ```
+
+mod aggregate;
+mod budget;
 mod change;
 mod collection;
 mod database;
@@ -70,17 +114,24 @@ mod engine;
 mod error;
 mod join;
 mod journal;
+mod ordered;
 mod query;
 mod subscription;
 mod view;
 mod write_batch;
 
+pub use aggregate::{GroupedQuery, StatsI64};
+pub use budget::{ExecutionBudget, ExecutionStats};
 pub use change::{Change, DeltaBatch, Epoch, Poll, Row, Snapshot};
 pub use collection::Collection;
 pub use database::{Commit, Database};
 pub use error::Error;
 pub use join::{Joined, LeftJoined};
 pub use journal::{JournalLimits, ViewOptions};
+pub use ordered::{
+    OrderKey, OrderedChange, OrderedLiveQuery, OrderedQuery, OrderedRow, OrderedSnapshot,
+    OrderedSubscription, OrderedSubscriptionStart,
+};
 pub use query::Query;
 pub use subscription::Subscription;
 pub use view::{LiveQuery, SubscriptionStart};

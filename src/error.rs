@@ -6,6 +6,8 @@ use std::fmt;
 pub enum Error {
     /// A handle belongs to another database.
     WrongDatabase,
+    /// An execution limit was reached before publication.
+    BudgetExceeded(&'static str),
     /// The handle's database has been dropped.
     DatabaseDropped,
     /// An application panic invalidated further access to this database.
@@ -30,6 +32,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::BudgetExceeded(kind) => write!(f, "execution budget exceeded: {kind}"),
             Self::WrongDatabase => f.write_str("handle belongs to another database"),
             Self::DatabaseDropped => f.write_str("database has been dropped"),
             Self::Poisoned => f.write_str("database poisoned by an application panic"),
@@ -38,7 +41,7 @@ impl fmt::Display for Error {
             Self::MissingKey => f.write_str("key does not exist"),
             Self::InvalidBatch => f.write_str("a batch operation previously failed"),
             Self::Validation(message) => write!(f, "validation failed: {message}"),
-            Self::ArithmeticOverflow => f.write_str("revision overflow"),
+            Self::ArithmeticOverflow => f.write_str("checked arithmetic overflow"),
             Self::InvalidJournalLimits => f.write_str("journal capacities must be nonzero"),
             Self::ViewOptionsConflict => {
                 f.write_str("shared view has different journal capacities")

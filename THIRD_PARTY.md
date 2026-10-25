@@ -1,6 +1,6 @@
 # Source provenance
 
-M0–M2 is a new implementation of the accepted native Rust design. No source
+M0–M3 is a new implementation of the accepted native Rust design. No source
 files, vendor packages, bridge modules, or JS compatibility code were copied
 from either original project. The new crate has no third-party dependencies.
 

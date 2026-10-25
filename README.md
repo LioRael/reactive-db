@@ -1,8 +1,9 @@
 # reactive-db
 
-Experimental native Rust reactive collections. M0–M2 are implemented: typed
-collections, atomic in-memory write batches, incremental filter/map and inner/left join views, and
-bounded delta subscriptions. This is not yet the complete relational MVP.
+Experimental native Rust reactive collections. M0–M3 are implemented: typed
+collections, atomic in-memory write batches, incremental filter/map, inner/left joins, grouped count/stats, distinct values,
+sort/top-k, ordered deltas and bounded subscriptions. Execution budgets reject
+excessive batches before publication. The planned relational core MVP is implemented.
 
 Zero dependencies. Safe Rust. No JS, FFI, serde requirement, background thread,
 async runtime or connection to either original project. Rust 1.88+; development
@@ -32,7 +33,8 @@ fn main() -> Result<(), reactive_db::Error> {
 }
 ```
 
-Run `cargo run --example basic` or `cargo run --example joins`. Read [semantics](docs/semantics.md),
+Run `cargo run --example basic` or `cargo run --example joins`; `cargo run --example analytics` demonstrates
+grouped statistics and an ordered leaderboard. Read [semantics](docs/semantics.md),
 [implementation architecture](docs/architecture.md), and [delivery status](docs/status.md).
 
 ## Contracts
@@ -74,8 +76,7 @@ deltas; work-count tests check single-row updates at different collection sizes.
 Rustdoc includes compile-fail contracts. No external services or oracle runtime
 are required.
 
-Group/aggregate, sort/top-k, optimistic writes, persistence and UI adapters
-remain future milestones. Nothing has been published.
+Optimistic writes, persistence and UI adapters remain future milestones. Nothing has been published.
 
 ## Typed joins
 
@@ -92,3 +93,27 @@ let query = tasks.query().left_join_on(
 Duplicate keys produce all matching pairs; unmatched left rows have exactly one
 `None` placeholder. Both sides may change in the same write, including self-joins.
 Only final pair transitions are published. See the complete `joins` example.
+
+## Aggregates and ordered views
+
+```rust
+let stats = tasks.query().group_by(|task| task.project).stats_i64(|task| task.score);
+let top = db.materialize_ordered(stats.sort_by_key(|s| std::cmp::Reverse(s.sum)).take(10))?;
+```
+
+Groups expose `count()` or `stats_i64()` (count, checked i128 sum, retractable
+min/max). Empty groups disappear. `distinct_values(|row| value)` emits each complete
+projected value once, not a representative input row. `StatsI64::average()` returns
+an approximate `Option<f64>`; None protects manually constructed empty statistics.
+
+An `OrderedQuery` supports `take` and ordered materialization. Ordered snapshots
+are in `(sort_key, id)` order. `OrderedChange` carries old/new tokens and payloads;
+consumers apply each complete batch atomically without positional Move storms.
+Top-k maintains the full index but compares only old/new selected windows.
+
+`Database::with_budget(ExecutionBudget { .. })` configures per-operation limits;
+`set_execution_budget` can raise limits before retrying a rejected batch. Defaults:
+100,000 staged mutations, 1,000,000 emitted source/derived transitions and
+10,000,000 logical work units. Zero forbids the corresponding work. `Commit.stats`
+reports consumed counts. These limits do not bound payload bytes, elapsed time or
+arbitrary user closure execution. See [execution contracts](docs/semantics.md).

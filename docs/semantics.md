@@ -1,4 +1,4 @@
-# M0–M2 semantics
+# M0–M3 semantics
 
 ## Identity and rows
 
@@ -51,7 +51,8 @@ contains at most one final transition per pair identity. Same-batch dual updates
 and cross-collection writes never expose intermediate mixed versions. Chained
 joins consume the same final batch. No output changes means no journal record,
 but side indexes still advance. Large fanout uses the normal bounded-journal lag
-contract; output tables and per-write preparation have no execution budget yet.
+contract. Execution budgets limit per-operation work and transitions; retained
+output tables are not governed by a global memory limit.
 
 ## Panics
 
@@ -95,3 +96,55 @@ keeps its already-materialized nodes alive. Old snapshots may outlive the databa
 
 A live view is eager: mutations maintain it even when no subscriber is currently
 polling. There are no implicit timers or workers.
+
+## Aggregates and distinct values
+
+`group_by` selects an ordered group key. `count` includes duplicate contributions;
+`stats_i64` maintains checked u64 count, i128 sum and i64 min/max. Groups exist only
+while nonempty. Removing one duplicate extreme keeps the remaining multiplicity;
+removing the last extreme finds the next indexed value. New/replaced members run
+selectors once; removed members use cached contributions. Equal final aggregate
+values do not emit Update even if group membership changed. Exact mean is sum/count;
+`average()` uses rounded f64 casts and division, returning None for manually
+constructed count-zero values. Monetary arithmetic should use the exact fields.
+
+`distinct_values` uses the complete projected value as both identity and output.
+Multiplicity changes from positive to positive emit no delta. Only first presence
+and last absence emit Insert/Remove. It never picks an arbitrary source row.
+
+## Ordered results
+
+`sort_by_key` requires Ord keys and uses identity as a stable tie-breaker. Reverse
+provides descending order. Payloads remain free of Clone/Eq/Ord bounds. `take(0)`
+returns no rows; repeated takes choose the smallest limit. Ordered snapshots are
+already token-sorted. Ordered batches are ordered by identity, not application
+sort key: consumers must use tokens and apply each whole batch atomically.
+
+An Update carries both previous and final OrderedRow, including tokens. A changed
+sort key does not change logical identity. Window exits/entries are Remove/Insert;
+unchanged retained rows receive no delta just because their rank shifted. Windows
+retain a full input index. Arbitrary offset, rank, dynamic windows and automatic
+order propagation through unordered transformations are not provided.
+
+The ordered subscription has the same finite shared history, epoch, lag/resync and
+lease rules as an unordered subscription. Oversized batches create explicit gaps.
+Polling converts only the retained batch and never runs query selectors.
+
+## Budgets
+
+ExecutionBudget applies independently to each write/materialization. Defaults are
+100,000 staged write operations, 1,000,000 source/derived output changes and
+10,000,000 logical work units. Repeated operations count even if the final source
+change coalesces away; reads are not mutation operations. Output counts include
+internal graph nodes, not just subscribed roots. Work meters plan/node visits,
+rows/candidates and bounded window/extrema scans, excluding tree comparisons.
+Initial scans use the work limit; input-change limits apply only to writes.
+
+A zero limit forbids that work. BudgetExceeded is a normal pre-commit error;
+catching a write-method budget error inside the closure still invalidates the
+batch. No epoch, journal, source row or operator state publishes on rejection.
+Application closure side effects cannot be undone; selectors must remain pure.
+`set_execution_budget` changes subsequent limits and `Commit.stats` exposes usage.
+These are not hard byte/time limits, callback preemption, cumulative database
+memory limits or asynchronous yielding. Slow subscribers use independent journal
+retention limits and never force a write rollback.

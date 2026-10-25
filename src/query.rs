@@ -1,4 +1,5 @@
 use crate::Error;
+use crate::budget::Meter;
 use crate::database::Database;
 use crate::engine::{self, Lease, Linear, NodeId, Nodes, Owner, Runtime, State, Transform};
 use std::collections::BTreeMap;
@@ -9,10 +10,16 @@ use std::sync::Arc;
 
 pub(crate) trait Plan {
     fn token(&self) -> &Rc<()>;
-    fn validate(&self, _owner: &Rc<Owner>) -> Result<(), Error> {
+    fn validate(&self, _owner: &Rc<Owner>, _meter: &mut Meter) -> Result<(), Error> {
         Ok(())
     }
-    fn build(&self, db: &Database, new: &mut Nodes, order: &mut Vec<NodeId>);
+    fn build(
+        &self,
+        db: &Database,
+        new: &mut Nodes,
+        order: &mut Vec<NodeId>,
+        meter: &mut Meter,
+    ) -> Result<(), Error>;
 }
 
 /// A lazy typed query plan; cloning shares its explicit node identity.
@@ -42,9 +49,10 @@ impl<I, T> fmt::Debug for Query<I, T> {
     }
 }
 impl<I, T> Query<I, T> {
-    pub(crate) fn validate(&self, owner: &Rc<Owner>) -> Result<(), Error> {
+    pub(crate) fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {
         self.owner.check(owner)?;
-        self.plan.validate(owner)
+        meter.work()?;
+        self.plan.validate(owner, meter)
     }
     pub(crate) fn id(&self) -> NodeId {
         engine::node_id(self.plan.token())
@@ -91,11 +99,19 @@ impl Plan for SourcePlan {
     fn token(&self) -> &Rc<()> {
         &self.0
     }
-    fn build(&self, db: &Database, _new: &mut Nodes, _order: &mut Vec<NodeId>) {
+    fn build(
+        &self,
+        db: &Database,
+        _new: &mut Nodes,
+        _order: &mut Vec<NodeId>,
+        meter: &mut Meter,
+    ) -> Result<(), Error> {
+        meter.work()?;
         assert!(
             db.nodes.contains_key(&engine::node_id(&self.0)),
             "source plan must belong to a registered collection"
         );
+        Ok(())
     }
 }
 struct LinearPlan<K, A, B> {
@@ -104,27 +120,37 @@ struct LinearPlan<K, A, B> {
     transform: Transform<A, B>,
 }
 impl<K: Ord + Clone + 'static, A: 'static, B: 'static> Plan for LinearPlan<K, A, B> {
-    fn validate(&self, owner: &Rc<Owner>) -> Result<(), Error> {
-        self.parent.validate(owner)
+    fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {
+        self.parent.validate(owner, meter)
     }
     fn token(&self) -> &Rc<()> {
         &self.token
     }
-    fn build(&self, db: &Database, new: &mut Nodes, order: &mut Vec<NodeId>) {
+    fn build(
+        &self,
+        db: &Database,
+        new: &mut Nodes,
+        order: &mut Vec<NodeId>,
+        meter: &mut Meter,
+    ) -> Result<(), Error> {
+        meter.work()?;
         let id = engine::node_id(&self.token);
         if db.nodes.contains_key(&id) || new.contains_key(&id) {
-            return;
+            return Ok(());
         }
-        self.parent.plan.build(db, new, order);
+        self.parent.plan.build(db, new, order, meter)?;
         let parent = new
             .get(&self.parent.id())
             .or_else(|| db.nodes.get(&self.parent.id()))
             .expect("parent is built before its dependent node");
-        let rows: BTreeMap<_, _> = engine::state::<K, A>(parent.as_ref())
-            .rows
-            .iter()
-            .filter_map(|(key, value)| (self.transform)(value).map(|output| (key.clone(), output)))
-            .collect();
+        let mut rows = BTreeMap::new();
+        for (key, value) in &engine::state::<K, A>(parent.as_ref()).rows {
+            meter.work()?;
+            if let Some(output) = (self.transform)(value) {
+                meter.output()?;
+                rows.insert(key.clone(), output);
+            }
+        }
         new.insert(
             id,
             Box::new(Runtime {
@@ -138,5 +164,6 @@ impl<K: Ord + Clone + 'static, A: 'static, B: 'static> Plan for LinearPlan<K, A,
             }),
         );
         order.push(id);
+        Ok(())
     }
 }
