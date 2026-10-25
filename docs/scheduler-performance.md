@@ -1,3 +1,5 @@
+> 历史报告：其中的逐边 ready 集合已由有序序列合并替代；参见 [密集更新优化](dense-scheduler-performance.md)。
+
 # reactive-db 受影响节点调度：实现、回归与性能报告
 
 日期：2026-10-26。对比基线：`dca6164d355654d7e851abc972b221d984dcf9a2`。

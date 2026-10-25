@@ -275,6 +275,7 @@ impl Database {
             // release other plan leases and enqueue further retirement events.
             let retired = std::mem::take(&mut *self.owner.retired.borrow_mut());
             if retired.is_empty() {
+                self.scheduler.reclaim();
                 break;
             }
             for id in retired {

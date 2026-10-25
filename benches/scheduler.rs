@@ -41,6 +41,48 @@ fn main() {
             drop(black_box(views));
         }
     }
+    for width in [100, 1000] {
+        let mut db = Database::new();
+        let hot = db.create_collection::<u64, i64>("hot").unwrap();
+        db.write(|tx| tx.insert(&hot, 0, 0)).unwrap();
+        let plans = (0..width)
+            .map(|_| hot.query().map(|v| *v))
+            .collect::<Vec<_>>();
+        let roots = plans
+            .iter()
+            .map(|p| db.materialize(p.clone()).unwrap())
+            .collect::<Vec<_>>();
+        let leaves = plans
+            .into_iter()
+            .map(|p| db.materialize(p.map(|v| v + 1)).unwrap())
+            .collect::<Vec<_>>();
+        let mut tick = 0;
+        group.bench_function(BenchmarkId::new("layered", width), |b| {
+            b.iter(|| {
+                tick ^= 1;
+                black_box(db.write(|tx| tx.replace(&hot, 0, tick)).unwrap());
+            })
+        });
+        drop(black_box((roots, leaves)));
+
+        let left = hot.query().map(|v| *v);
+        let right = hot.query().map(|v| *v).map(|v| *v);
+        let joins = (0..width)
+            .map(|_| {
+                db.materialize(left.clone().join_on(right.clone(), |_, v| *v, |_, v| *v))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        // Drain retired layers outside the timing loop.
+        db.write(|_| Ok(())).unwrap();
+        group.bench_function(BenchmarkId::new("converging", width), |b| {
+            b.iter(|| {
+                tick ^= 1;
+                black_box(db.write(|tx| tx.replace(&hot, 0, tick)).unwrap());
+            })
+        });
+        drop(black_box(joins));
+    }
     group.finish();
     c.final_summary();
 }

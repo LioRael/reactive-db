@@ -76,6 +76,13 @@ impl Meter {
             "output changes",
         )
     }
+    pub fn work_many(&mut self, amount: usize) -> Result<(), Error> {
+        if amount > self.limits.max_work.saturating_sub(self.stats.work) {
+            return Err(Error::BudgetExceeded("work"));
+        }
+        self.stats.work += amount;
+        Ok(())
+    }
     pub fn work(&mut self) -> Result<(), Error> {
         Self::charge(&mut self.stats.work, self.limits.max_work, "work")
     }

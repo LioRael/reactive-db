@@ -132,3 +132,7 @@ are not linked into applications that depend on the library.
 Run `cargo bench --bench scheduler --locked` to compare unrelated graph width,
 empty writes, pruned propagation and fully affected fanout. See the
 [scheduler follow-up](docs/scheduler-performance.md) for before/after results.
+
+Dense scheduling uses a merging heap over borrowed dependency sequences. See
+[dense scheduler measurements](docs/dense-scheduler-performance.md) for comparisons
+with the first affected-node scheduler and the original full-graph scheduler.

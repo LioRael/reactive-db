@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-78 tests pass: 65 unit/integration and 13 rustdoc tests, including 10 compile-fail
+84 tests pass: 71 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -85,3 +85,7 @@ change them independently; this task does not claim global directory immutabilit
 The scheduler follow-up replaces full-node scheduling, publication and retirement
 scans with reverse edges, a topological ready queue and lease retirement events.
 See [scheduler performance](scheduler-performance.md) for regressions and measurements.
+
+Dense propagation now merges borrowed ordered dependency runs instead of inserting
+each edge into a ready tree. See [dense scheduling](dense-scheduler-performance.md)
+for three-version benchmarks and retained sparse behavior.

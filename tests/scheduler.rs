@@ -218,3 +218,84 @@ fn failed_materialization_does_not_register_partial_dependents() -> Result<(), E
     assert_eq!(*view.snapshot(&db)?.rows[0].value, 8);
     Ok(())
 }
+
+#[test]
+fn failure_after_consuming_part_of_dense_queue_can_retry_and_retire() -> Result<(), Error> {
+    let mut db = Database::new();
+    let rows = db.create_collection::<u64, i64>("rows")?;
+    let calls = Rc::new(Cell::new(0));
+    let views = (0..128)
+        .map(|_| {
+            let calls = calls.clone();
+            db.materialize(rows.query().map(move |v| {
+                calls.set(calls.get() + 1);
+                *v
+            }))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let (_, mut subscription) = views[0].subscribe(&mut db)?;
+    let before = db.epoch()?;
+    db.set_execution_budget(ExecutionBudget {
+        max_work: 200,
+        ..Default::default()
+    })?;
+    assert!(matches!(
+        db.write(|tx| tx.insert(&rows, 0, 3)),
+        Err(Error::BudgetExceeded("work"))
+    ));
+    assert!(calls.get() > 0 && calls.get() < 128);
+    assert_eq!(db.epoch()?, before);
+    assert!(rows.get(&db, &0)?.is_none());
+    for view in &views {
+        assert!(view.snapshot(&db)?.rows.is_empty());
+    }
+    assert!(matches!(subscription.poll(&db)?, Poll::Idle));
+    calls.set(0);
+    db.set_execution_budget(ExecutionBudget::default())?;
+    db.write(|tx| tx.insert(&rows, 0, 3))?;
+    assert_eq!(calls.get(), 128);
+    drop(views);
+    drop(subscription);
+    db.write(|_| Ok(()))?;
+    calls.set(0);
+    db.write(|tx| tx.replace(&rows, 0, 4))?;
+    assert_eq!(calls.get(), 0);
+    Ok(())
+}
+
+#[test]
+fn dense_shared_parent_joins_publish_once_per_node_after_both_inputs() -> Result<(), Error> {
+    let mut db = Database::new();
+    let rows = db.create_collection::<u64, i64>("rows")?;
+    let left = rows.query().map(|v| v + 1);
+    let right = rows.query().map(|v| v + 2).map(|v| v - 1);
+    let calls = Rc::new(Cell::new(0));
+    let views = (0..128)
+        .map(|_| {
+            let calls = calls.clone();
+            db.materialize(
+                left.clone()
+                    .join_on(right.clone(), |_, v| *v, |_, v| *v)
+                    .map(move |v| {
+                        calls.set(calls.get() + 1);
+                        *v.left + *v.right
+                    }),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for value in 0..10 {
+        calls.set(0);
+        db.write(|tx| {
+            if value == 0 {
+                tx.insert(&rows, 0, value)
+            } else {
+                tx.replace(&rows, 0, value)
+            }
+        })?;
+        assert_eq!(calls.get(), 128);
+        for view in &views {
+            assert_eq!(*view.snapshot(&db)?.rows[0].value, 2 * (value + 1));
+        }
+    }
+    Ok(())
+}

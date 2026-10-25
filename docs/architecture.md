@@ -90,10 +90,18 @@ notifications. Weak runtime tokens keep allocation identities reserved until rem
 
 `scheduler.rs` assigns monotonic topological ranks during parent-first registration
 and stores reverse dependency edges. Capacity is checked before graph publication.
-Changed sources seed a rank-ordered deduplicating ready set; nodes with empty deltas
-stop downstream propagation while preserving any prepared index maintenance. All
+Changed sources seed a heap merging borrowed, already sorted child sequences. Each
+heap entry is one nonempty sequence, not one edge. Advancing the smallest sequence
+preserves rank order; equal ranks from converging inputs are skipped together. New
+sequences always point beyond the executing parent rank, so a node cannot be
+rescheduled after its turn. Entire sequence edge counts are charged before admission;
+nodes with empty deltas stop downstream propagation while preserving any prepared index maintenance. All
 preparation and edge/node budget checks precede sparse atomic publication. Removing
 nodes unlinks their incoming edges without renumbering surviving ranks.
+Scheduler metadata uses a standard HashMap solely for ID lookup, never iteration;
+child order and execution remain rank-determined. After retirement, metadata
+capacity shrinks if it exceeds four times live entries (with a small capacity floor),
+avoiding retained peak capacity without resizing on every removal.
 
 The node store may erase types internally to own heterogeneous collections; only
 typed constructors can register and resolve them. An internal downcast failure is
