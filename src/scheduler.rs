@@ -8,6 +8,7 @@ type Children = BTreeSet<(u64, NodeId)>;
 
 #[derive(Default)]
 pub(crate) struct Queue<'a> {
+    first: Option<Run<'a>>,
     runs: BinaryHeap<Reverse<Run<'a>>>,
     last: Option<u64>,
 }
@@ -38,21 +39,33 @@ impl<'a> Queue<'a> {
     fn push(&mut self, children: &'a Children) {
         let mut rest = children.iter();
         if let Some(&next) = rest.next() {
-            self.runs.push(Reverse(Run { next, rest }));
+            let mut incoming = Run { next, rest };
+            if let Some(first) = &mut self.first {
+                if incoming.next < first.next {
+                    std::mem::swap(first, &mut incoming);
+                }
+                self.runs.push(Reverse(incoming));
+            } else {
+                self.first = Some(incoming);
+            }
         }
     }
     pub fn pop_first(&mut self) -> Option<(u64, NodeId)> {
         loop {
-            let mut run = self.runs.peek_mut()?;
-            let next = run.0.next;
-            if let Some(&following) = run.0.rest.next() {
-                run.0.next = following;
-                drop(run);
+            let first = self.first.as_mut()?;
+            let next = first.next;
+            if let Some(&following) = first.rest.next() {
+                first.next = following;
+                if let Some(mut head) = self.runs.peek_mut()
+                    && head.0.next < first.next
+                {
+                    std::mem::swap(first, &mut head.0);
+                }
             } else {
-                std::collections::binary_heap::PeekMut::pop(run);
+                self.first = self.runs.pop().map(|run| run.0);
             }
-            // All newly added edges point forward in topological order. Equal
-            // ranks therefore arrive together, even across converging runs.
+            // Every new edge points forward. Equal ranks from converging runs
+            // arrive together, so no persistent visited set is needed.
             if self.last != Some(next.0) {
                 self.last = Some(next.0);
                 return Some(next);
@@ -139,12 +152,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn inline_run_stays_allocation_free_and_merges_new_earlier_children() {
+        let source = Children::from([(1, 1), (100, 100)]);
+        let branch = Children::from([(2, 2), (3, 3), (100, 100)]);
+        let mut ready = Queue::new();
+        ready.push(&source);
+        assert_eq!(ready.runs.capacity(), 0);
+        assert_eq!(ready.pop_first(), Some((1, 1)));
+        assert_eq!(ready.runs.capacity(), 0);
+        ready.push(&branch);
+        assert_eq!(ready.pop_first(), Some((2, 2)));
+        assert_eq!(ready.pop_first(), Some((3, 3)));
+        assert_eq!(ready.pop_first(), Some((100, 100)));
+        assert!(ready.pop_first().is_none());
+    }
+
+    #[test]
     fn wide_fanout_borrows_one_run_and_deduplicates_shared_runs() {
         let children: Children = (1..=10_000).map(|rank| (rank, rank as usize)).collect();
         let mut ready = Queue::new();
         ready.push(&children);
         ready.push(&children);
-        assert_eq!(ready.runs.len(), 2, "queue storage follows runs, not edges");
+        assert_eq!(ready.runs.len(), 1, "queue storage follows runs, not edges");
         for rank in 1..=10_000 {
             assert_eq!(ready.pop_first(), Some((rank, rank as usize)));
         }

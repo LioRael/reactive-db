@@ -90,8 +90,9 @@ notifications. Weak runtime tokens keep allocation identities reserved until rem
 
 `scheduler.rs` assigns monotonic topological ranks during parent-first registration
 and stores reverse dependency edges. Capacity is checked before graph publication.
-Changed sources seed a heap merging borrowed, already sorted child sequences. Each
-heap entry is one nonempty sequence, not one edge. Advancing the smallest sequence
+Changed sources seed a queue merging borrowed, already sorted child sequences.
+The smallest sequence stays inline; additional sequences live in a heap. Each
+entry is one nonempty sequence, not one edge. Advancing the smallest sequence
 preserves rank order; equal ranks from converging inputs are skipped together. New
 sequences always point beyond the executing parent rank, so a node cannot be
 rescheduled after its turn. Entire sequence edge counts are charged before admission;
@@ -102,6 +103,12 @@ Scheduler metadata uses a standard HashMap solely for ID lookup, never iteration
 child order and execution remain rank-determined. After retirement, metadata
 capacity shrinks if it exceeds four times live entries (with a small capacity floor),
 avoiding retained peak capacity without resizing on every removal.
+
+`stages.rs` holds per-write erased deltas and operator maintenance. The first entry
+is inline (commonly a shared source); further entries use a lookup-only HashMap.
+Source patches remain ordered BTreeMaps. A separate source/derived commit list
+preserves preparation and publication order, independent of stage storage.
+No stage table or ready queue survives a write, including rejected writes.
 
 The node store may erase types internally to own heterogeneous collections; only
 typed constructors can register and resolve them. An internal downcast failure is

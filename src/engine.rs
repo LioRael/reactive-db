@@ -8,7 +8,7 @@ use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
 pub(crate) type NodeId = usize;
-pub(crate) type Stages = BTreeMap<NodeId, Box<dyn Any>>;
+pub(crate) use crate::stages::Stages;
 pub(crate) type Nodes = BTreeMap<NodeId, Box<dyn Node>>;
 pub(crate) type Patch<K, T> = BTreeMap<K, Option<Arc<T>>>;
 pub(crate) type Pending<K, T> = Arc<[Change<K, T>]>;

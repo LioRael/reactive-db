@@ -197,6 +197,7 @@ impl Database {
             (batch.patches, batch.meter)
         };
         let mut stages = Stages::new();
+        let mut commits = Vec::new();
         for (id, patch) in patches {
             let node = self
                 .nodes
@@ -205,9 +206,10 @@ impl Database {
             let changes = node.source_changes(patch, &mut meter)?;
             if node.has_changes(changes.as_ref()) {
                 stages.insert(id, changes);
+                commits.push(id);
             }
         }
-        if stages.is_empty() {
+        if commits.is_empty() {
             return Ok(Commit {
                 epoch: self.epoch,
                 changed: false,
@@ -222,10 +224,8 @@ impl Database {
         );
         let mut maintenance = Stages::new();
         let mut ready = crate::scheduler::Queue::new();
-        let mut commits = Vec::new();
-        for &id in stages.keys() {
+        for &id in &commits {
             meter.work()?;
-            commits.push(id);
             self.scheduler.propagate(id, &mut ready, &mut meter)?;
         }
         while let Some((_, id)) = ready.pop_first() {

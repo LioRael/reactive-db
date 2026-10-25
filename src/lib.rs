@@ -117,6 +117,7 @@ mod journal;
 mod ordered;
 mod query;
 mod scheduler;
+mod stages;
 mod subscription;
 mod view;
 mod write_batch;

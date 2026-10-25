@@ -136,3 +136,6 @@ empty writes, pruned propagation and fully affected fanout. See the
 Dense scheduling uses a merging heap over borrowed dependency sequences. See
 [dense scheduler measurements](docs/dense-scheduler-performance.md) for comparisons
 with the first affected-node scheduler and the original full-graph scheduler.
+
+The [scheduler hot-path follow-up](docs/scheduler-path-performance.md) measures
+inline queue/stage storage, including 10,000-wide layered and converging graphs.

@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-84 tests pass: 71 unit/integration and 13 rustdoc tests, including 10 compile-fail
+88 tests pass: 75 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -89,3 +89,7 @@ See [scheduler performance](scheduler-performance.md) for regressions and measur
 Dense propagation now merges borrowed ordered dependency runs instead of inserting
 each edge into a ready tree. See [dense scheduling](dense-scheduler-performance.md)
 for three-version benchmarks and retained sparse behavior.
+
+The hot-path follow-up adds inline single-run scheduling and inline-first stage
+lookup, preserving ordered source patches and independent commit order. See
+[hot-path measurements](scheduler-path-performance.md).

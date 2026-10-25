@@ -41,7 +41,7 @@ fn main() {
             drop(black_box(views));
         }
     }
-    for width in [100, 1000] {
+    for width in [100, 1000, 10_000] {
         let mut db = Database::new();
         let hot = db.create_collection::<u64, i64>("hot").unwrap();
         db.write(|tx| tx.insert(&hot, 0, 0)).unwrap();

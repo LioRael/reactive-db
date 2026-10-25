@@ -146,8 +146,9 @@ window/extrema scans, excluding tree comparisons. Exact work counts are diagnost
 and may change with implementation; the configured limit is always enforced.
 Scheduling charges each reached node before evaluation and each dependency edge
 before queue insertion, including converging edges; failed scheduling publishes nothing.
-Already sorted dependency sequences enter a merging heap by reference after their
-entire edge count is charged. This preserves successful work counts without
+Already sorted dependency sequences enter a merging queue by reference after their
+entire edge count is charged. The first sequence and first stage entry are inline;
+additional entries use a heap and lookup table respectively. This preserves successful work counts without
 allocating a ready-set entry for each edge. Queue state belongs to one write and
 is discarded on error or unwind, so rejected writes leave no visited markers.
 Lease retirement is lifecycle cleanup outside this logical execution budget.

@@ -1,6 +1,7 @@
 use crate::budget::Meter;
-use crate::engine::{Patch, Stages};
+use crate::engine::{NodeId, Patch};
 use crate::{Collection, Database, Error};
+use std::any::Any;
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -12,7 +13,7 @@ use std::sync::Arc;
 /// failed operation are dropped; retain application input separately if retrying.
 pub struct WriteBatch<'db> {
     db: &'db Database,
-    pub(crate) patches: Stages,
+    pub(crate) patches: BTreeMap<NodeId, Box<dyn Any>>,
     pub(crate) meter: Meter,
     pub(crate) invalid: Cell<bool>,
 }
@@ -28,7 +29,7 @@ impl<'db> WriteBatch<'db> {
     pub(crate) fn new(db: &'db Database) -> Self {
         Self {
             db,
-            patches: Stages::new(),
+            patches: BTreeMap::new(),
             meter: Meter::new(db.budget),
             invalid: Cell::new(false),
         }

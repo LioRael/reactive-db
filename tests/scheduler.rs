@@ -299,3 +299,50 @@ fn dense_shared_parent_joins_publish_once_per_node_after_both_inputs() -> Result
     }
     Ok(())
 }
+
+#[test]
+fn failed_dense_stages_release_payloads_before_retry_and_after_retirement() -> Result<(), Error> {
+    struct Tracked(Rc<Cell<usize>>);
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() - 1);
+        }
+    }
+    let mut db = Database::new();
+    let source = db.create_collection::<u64, i64>("source")?;
+    let live = Rc::new(Cell::new(0));
+    let views = (0..1000)
+        .map(|_| {
+            let live = live.clone();
+            db.materialize(source.query().map(move |_| {
+                live.set(live.get() + 1);
+                Tracked(live.clone())
+            }))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    db.set_execution_budget(ExecutionBudget {
+        max_output_changes: 500,
+        ..Default::default()
+    })?;
+    assert!(matches!(
+        db.write(|tx| tx.insert(&source, 0, 1)),
+        Err(Error::BudgetExceeded("output changes"))
+    ));
+    assert_eq!(
+        live.get(),
+        0,
+        "failed sparse/hash stages release all prepared payloads"
+    );
+    assert!(source.get(&db, &0)?.is_none());
+    db.set_execution_budget(ExecutionBudget::default())?;
+    db.write(|tx| tx.insert(&source, 0, 1))?;
+    assert_eq!(live.get(), 1000);
+    drop(views);
+    db.write(|_| Ok(()))?;
+    assert_eq!(
+        live.get(),
+        0,
+        "runtime rows and journals release on retirement"
+    );
+    Ok(())
+}
