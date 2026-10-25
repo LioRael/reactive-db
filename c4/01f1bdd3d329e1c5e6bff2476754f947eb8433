@@ -1,0 +1,47 @@
+README.md
+  s_ee0a00b403076b::t_231e0beb826a96 135-138
+benches/scheduler.rs
+  s_ee0a00b403076b::t_ad830fa32e17dc 44-85
+docs/architecture.md
+  s_ee0a00b403076b::t_cb1df7ff9281e0 93-98,101-104
+docs/dense-scheduler-performance.md
+  s_ee0a00b403076b::t_2ce3d23dd8f75d 1-81
+docs/scheduler-performance.md
+  s_ee0a00b403076b::t_667d34a2c96969 1-2
+docs/semantics.md
+  s_ee0a00b403076b::t_8cc671a0cf5ef6 149-152
+docs/status.md
+  s_ee0a00b403076b::t_99c7e50270d0c7 24,88-91
+src/budget.rs
+  s_77320f5a65d052::t_680b090181158b 79-85
+src/database.rs
+  s_ee0a00b403076b::t_175cc44eda7c69 278
+src/scheduler.rs
+  s_ee0a00b403076b::t_4a4bd1932d65dc 4-5,7-62,66,72,97,101-107,111-115,118-125,141-256
+tests/scheduler.rs
+  s_ee0a00b403076b::t_df8f1f469074f8 221-301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c401f1bdd3d329e1c5e6bff2476754f947eb8433",
+  "prompts": {},
+  "sessions": {
+    "s_77320f5a65d052": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "177b2a5c-88b3-4784-aea0-fad69f1b286d",
+        "model": "unknown"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    },
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
