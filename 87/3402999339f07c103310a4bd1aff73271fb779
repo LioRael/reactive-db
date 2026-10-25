@@ -1,0 +1,45 @@
+README.md
+  s_ee0a00b403076b::t_cc3767c715c68d 139-141
+benches/scheduler.rs
+  s_ee0a00b403076b::t_aea9709fae1358 44
+docs/architecture.md
+  s_ee0a00b403076b::t_f467d62f51a67f 93-95,107-112
+docs/dense-scheduler-performance.md
+  s_ee0a00b403076b::t_56c5e262dd4119 1-2
+docs/scheduler-path-performance.md
+  s_ee0a00b403076b::t_791bdac984634a 1-88
+docs/semantics.md
+  s_ee0a00b403076b::t_9b8275b44c3dc1 149-151
+docs/status.md
+  s_ee0a00b403076b::t_4e018a724f41c4 24,92-95
+src/database.rs
+  s_ee0a00b403076b::t_85e0b9d09643b8 200,209,212,227
+src/engine.rs
+  s_ee0a00b403076b::t_4a31cd9bd41710 11
+src/lib.rs
+  s_ee0a00b403076b::t_54147efd0dd2f2 120
+src/scheduler.rs
+  s_ee0a00b403076b::t_10bf9297a11d06 11,42-50,55-63,65,67-68,154-169,176
+src/stages.rs
+  s_ee0a00b403076b::t_a245545468dcd4 1-95
+src/write_batch.rs
+  s_ee0a00b403076b::t_a23605fb58b7f6 2,4,16,32
+tests/scheduler.rs
+  s_ee0a00b403076b::t_a5469446a7ba60 302-348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "873402999339f07c103310a4bd1aff73271fb779",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
