@@ -1,4 +1,5 @@
 use crate::Error;
+use std::collections::BTreeSet;
 
 /// Per-operation limits for staged mutations, emitted transitions and logical work.
 ///
@@ -35,13 +36,23 @@ pub struct ExecutionStats {
 pub(crate) struct Meter {
     limits: ExecutionBudget,
     pub stats: ExecutionStats,
+    validated: BTreeSet<usize>,
 }
 impl Meter {
     pub fn new(limits: ExecutionBudget) -> Self {
         Self {
             limits,
             stats: ExecutionStats::default(),
+            validated: BTreeSet::new(),
         }
+    }
+    pub fn validate_plan(&mut self, id: usize) -> Result<bool, Error> {
+        if self.validated.contains(&id) {
+            return Ok(false);
+        }
+        self.work()?;
+        self.validated.insert(id);
+        Ok(true)
     }
     fn charge(value: &mut usize, limit: usize, kind: &'static str) -> Result<(), Error> {
         if *value >= limit {

@@ -137,7 +137,9 @@ ExecutionBudget applies independently to each write/materialization. Defaults ar
 10,000,000 logical work units. Repeated operations count even if the final source
 change coalesces away; reads are not mutation operations. Output counts include
 internal graph nodes, not just subscribed roots. Work meters plan/node visits,
-rows/candidates and bounded window/extrema scans, excluding tree comparisons.
+rows/candidates (including removed members skipped by join overlays) and bounded
+window/extrema scans, excluding tree comparisons. Exact work counts are diagnostic
+and may change with implementation; the configured limit is always enforced.
 Initial scans use the work limit; input-change limits apply only to writes.
 
 A zero limit forbids that work. BudgetExceeded is a normal pre-commit error;

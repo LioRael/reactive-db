@@ -45,6 +45,10 @@ keys. Only inserted/replaced rows invoke selectors.
 
 For each changed left identity, collect pairs from its old right bucket and its
 final right bucket. For each changed right identity, do the symmetric lookup.
+When staged membership changes, cache each final bucket as borrowed identity
+references once per preparation; unchanged buckets remain direct iterators. Charge
+work for all scanned members, including staged removals. This avoids repeated
+filtering of an almost-empty final bucket for every incoming changed row.
 Deduplicate candidate pair identities, then compare committed output against the
 final overlays on both sides. This includes simultaneous insert/update cross terms
 exactly once, including self-joins. It is equivalent to keyed differential join
@@ -75,7 +79,8 @@ derived runtime nodes retain only a weak token while plans/downstream plans own
 strong tokens. Node lookup uses the private allocation address while the allocation
 is retained by strong or weak references, so old IDs cannot alias live allocations.
 IDs never escape the public interface, and no slot is reused through an unchecked
-cast. Retirement removes dead derived nodes before the next mutable operation.
+cast. Retirement removes dead derived nodes before the next mutable operation. The
+execution-order list is filtered only when retirement actually removed nodes.
 
 The node store may erase types internally to own heterogeneous collections; only
 typed constructors can register and resolve them. An internal downcast failure is
@@ -123,7 +128,10 @@ is exposed on OrderedQuery.
 ## Execution budgets and failure atomicity
 
 Preparation and plan construction now return Result. One meter spans a write or
-materialization, including nested plans. Inputs count successful staged mutation
+materialization, including nested plans. Ownership validation memoizes visited
+plan identities for this operation, so shared diamond graphs are checked by unique
+nodes/edges rather than exponentially many paths. Every handle still checks its
+owner before consulting the memo. Inputs count successful staged mutation
 operations before coalescing. Outputs count source/derived transitions (or initial
 constructed result rows). Work counts logical plan/node/row visits and join
 candidates, plus aggregate extrema and window work; it does not count BTree

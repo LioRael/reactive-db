@@ -1,6 +1,6 @@
 use crate::engine::Pending;
 use crate::{Error, budget::Meter};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -126,17 +126,50 @@ impl<I: Ord + Clone, T, J: Ord + Clone> Overlay<'_, I, T, J> {
             None => self.base.rows.get(id),
         }
     }
-    pub fn members<'a>(&'a self, key: &'a J) -> impl Iterator<Item = &'a I> {
-        self.base
-            .members(key)
-            .filter(move |id| {
-                !self
-                    .patch
-                    .removed
-                    .get(key)
-                    .is_some_and(|ids| ids.contains(*id))
-            })
-            .chain(self.patch.added.get(key).into_iter().flatten())
+    fn members(&self, key: &J, meter: &mut Meter) -> Result<Vec<&I>, Error> {
+        let mut members = Vec::new();
+        // The caller caches this final bucket per key for the entire preparation.
+        // Meter skipped old members too: a bulk retraction is still work.
+        for id in self.base.members(key) {
+            meter.work()?;
+            if !self
+                .patch
+                .removed
+                .get(key)
+                .is_some_and(|ids| ids.contains(id))
+            {
+                members.push(id);
+            }
+        }
+        for id in self.patch.added.get(key).into_iter().flatten() {
+            meter.work()?;
+            members.push(id);
+        }
+        Ok(members)
+    }
+    pub fn visit_members<'a>(
+        &'a self,
+        key: &J,
+        cache: &mut BTreeMap<J, Vec<&'a I>>,
+        meter: &mut Meter,
+        mut visit: impl FnMut(&I),
+    ) -> Result<(), Error> {
+        if !self.patch.removed.contains_key(key) && !self.patch.added.contains_key(key) {
+            for id in self.base.members(key) {
+                meter.work()?;
+                visit(id);
+            }
+            return Ok(());
+        }
+        let members = match cache.entry(key.clone()) {
+            btree_map::Entry::Occupied(entry) => entry.into_mut(),
+            btree_map::Entry::Vacant(entry) => entry.insert(self.members(key, meter)?),
+        };
+        for id in members.iter() {
+            meter.work()?;
+            visit(id);
+        }
+        Ok(())
     }
     pub fn has_members(&self, key: &J) -> bool {
         let old = self.base.buckets.get(key).map_or(0, BTreeSet::len);

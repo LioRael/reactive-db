@@ -4,7 +4,7 @@ Date: 2026-10-26. Local implementation only; not published.
 
 ## Delivered
 
-The planned native relational core MVP is implemented in a dependency-free,
+The planned native relational core MVP is implemented in a runtime-dependency-free,
 safe Rust 2024 library (minimum Rust 1.88):
 
 - Typed collections, atomic heterogeneous writes, read-your-writes, sticky errors,
@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-65 tests pass: 52 unit/integration and 13 rustdoc tests, including 10 compile-fail
+69 tests pass: 56 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -45,12 +45,15 @@ Work-count tests at 100 and 10,000 rows show one changed member invokes only its
 group/value/sort selectors and consumes fewer than 100 logical units for stats plus
 a top-5. Retraction invokes no selector. Full-sort replacement of one row among
 10,000 emits one ordered Update and consumes fewer than 20 units. Existing clone
-count tests for sparse writes/joins remain passing. No timing benchmark is claimed.
+count tests for sparse writes/joins remain passing. The subsequent full audit adds
+Criterion timing measurements and adversarial graph/bucket/lifetime regressions;
+see [audit and performance](audit-performance.md).
 
 Native Cargo check/test/clippy, rustfmt, warning-clean rustdoc and all three examples
 pass on macOS arm64 with pinned Rust 1.99.0. Native check/test also pass with Rust
 1.88.0. Rustc wrappers were bypassed invocation-locally; no toolchain installation,
-global configuration change, new dependencies or cross-platform execution occurred.
+global configuration change or cross-platform execution occurred. Criterion is now
+a development-only benchmark dependency; runtime dependencies remain empty.
 
 ## Design choices and remaining scope
 

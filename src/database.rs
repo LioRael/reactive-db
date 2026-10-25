@@ -252,8 +252,11 @@ impl Database {
         )
     }
     fn retire(&mut self) {
+        let previous_len = self.nodes.len();
         self.nodes.retain(|_, node| node.alive());
-        self.order.retain(|id| self.nodes.contains_key(id));
+        if self.nodes.len() != previous_len {
+            self.order.retain(|id| self.nodes.contains_key(id));
+        }
     }
 }
 impl Drop for Database {

@@ -5,7 +5,7 @@ collections, atomic in-memory write batches, incremental filter/map, inner/left 
 sort/top-k, ordered deltas and bounded subscriptions. Execution budgets reject
 excessive batches before publication. The planned relational core MVP is implemented.
 
-Zero dependencies. Safe Rust. No JS, FFI, serde requirement, background thread,
+Zero runtime dependencies. Safe Rust. No JS, FFI, serde requirement, background thread,
 async runtime or connection to either original project. Rust 1.88+; development
 checks use the pinned 1.99.0 toolchain.
 
@@ -74,7 +74,7 @@ The integration suite includes deterministic generated histories compared agains
 an independent full-recomputation model and a mirror rebuilt exclusively from
 deltas; work-count tests check single-row updates at different collection sizes.
 Rustdoc includes compile-fail contracts. No external services or oracle runtime
-are required.
+are required. Criterion is a development-only benchmark dependency.
 
 Optimistic writes, persistence and UI adapters remain future milestones. Nothing has been published.
 
@@ -117,3 +117,13 @@ Top-k maintains the full index but compares only old/new selected windows.
 10,000,000 logical work units. Zero forbids the corresponding work. `Commit.stats`
 reports consumed counts. These limits do not bound payload bytes, elapsed time or
 arbitrary user closure execution. See [execution contracts](docs/semantics.md).
+
+## Audit and performance
+
+Run `cargo bench --bench core --locked` for Criterion workloads across input size,
+change count, join fanout, window size, snapshots and graph/subscription size.
+`cargo bench --bench memory --locked` checks payload lifetimes over repeated full
+graph construction/drop; on systems with `ps` it also prints RSS in KiB.
+See [audit and measurement results](docs/audit-performance.md) for methodology,
+regressions fixed, measured results and remaining limits. Benchmark dependencies
+are not linked into applications that depend on the library.

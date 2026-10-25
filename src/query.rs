@@ -51,7 +51,9 @@ impl<I, T> fmt::Debug for Query<I, T> {
 impl<I, T> Query<I, T> {
     pub(crate) fn validate(&self, owner: &Rc<Owner>, meter: &mut Meter) -> Result<(), Error> {
         self.owner.check(owner)?;
-        meter.work()?;
+        if !meter.validate_plan(self.id())? {
+            return Ok(());
+        }
         self.plan.validate(owner, meter)
     }
     pub(crate) fn id(&self) -> NodeId {

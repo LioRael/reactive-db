@@ -124,6 +124,8 @@ impl<
         let left = self.left.overlay(&left_patch);
         let right = self.right.overlay(&right_patch);
         let mut candidates = BTreeSet::new();
+        let mut left_buckets = BTreeMap::new();
+        let mut right_buckets = BTreeMap::new();
         for li in left_patch.rows.keys() {
             if let Some(old) = self.left.rows.get(li) {
                 for ri in self.right.members(&old.key) {
@@ -132,10 +134,9 @@ impl<
                 }
             }
             if let Some(new) = left.get(li) {
-                for ri in right.members(&new.key) {
-                    meter.work()?;
+                right.visit_members(&new.key, &mut right_buckets, meter, |ri| {
                     candidates.insert((li.clone(), Some(ri.clone())));
-                }
+                })?;
             }
             if M::OUTER {
                 candidates.insert((li.clone(), None));
@@ -148,16 +149,20 @@ impl<
                 .get(ri)
                 .into_iter()
                 .flat_map(|old| self.left.members(&old.key));
-            let new_left = right
-                .get(ri)
-                .into_iter()
-                .flat_map(|new| left.members(&new.key));
-            for li in old_left.chain(new_left) {
+            for li in old_left {
                 meter.work()?;
                 candidates.insert((li.clone(), Some(ri.clone())));
                 if M::OUTER {
                     candidates.insert((li.clone(), None));
                 }
+            }
+            if let Some(new) = right.get(ri) {
+                left.visit_members(&new.key, &mut left_buckets, meter, |li| {
+                    candidates.insert((li.clone(), Some(ri.clone())));
+                    if M::OUTER {
+                        candidates.insert((li.clone(), None));
+                    }
+                })?;
             }
         }
         // Pair identities deduplicate the two sides, including the simultaneous

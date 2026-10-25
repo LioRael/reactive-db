@@ -2,7 +2,9 @@
 
 M0–M3 is a new implementation of the accepted native Rust design. No source
 files, vendor packages, bridge modules, or JS compatibility code were copied
-from either original project. The new crate has no third-party dependencies.
+from either original project. The library has no third-party runtime dependencies. Criterion 0.5.1 (Apache-2.0
+OR MIT) is a development-only dependency used by the performance harness; its
+transitive dependency versions are recorded in Cargo.lock.
 
 The earlier audit of tanstack-db-rs informed delta propagation, typed consumer
 scenarios and the decision to replace the original whole-row Ord bags, callback
