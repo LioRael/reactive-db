@@ -1,0 +1,67 @@
+README.md
+  s_ee0a00b403076b::t_96b3ca04cbc825 3-6,36-37,79,96-119
+THIRD_PARTY.md
+  s_ee0a00b403076b::t_e08421100c0c92 3
+docs/architecture.md
+  s_ee0a00b403076b::t_b85e47fdf99ad0 1,3,17-21,69,91-137
+docs/semantics.md
+  s_ee0a00b403076b::t_142ec2d3988bff 1,54-55,99-150
+docs/status.md
+  s_ee0a00b403076b::t_0b99987a7852ce 1,7-20,24-76,79-80
+examples/analytics.rs
+  s_ee0a00b403076b::t_73b199c42d94a6 1-59
+src/aggregate.rs
+  s_ee0a00b403076b::t_61d4276bcc71a6 1-409
+src/budget.rs
+  s_ee0a00b403076b::t_83363eaed858da 1-70
+src/database.rs
+  s_ee0a00b403076b::t_f544bec489a8b9 1,5,18-19,32,59,64-80,120,134,142-143,156,173,184,190,198,207,222-223,243
+src/engine.rs
+  s_ee0a00b403076b::t_323bb2934544ef 1,65-75,100-105,123-128,145-149,153,155-160,164,190-199,201-212
+src/error.rs
+  s_ee0a00b403076b::t_a38fc24bfce9da 9-10,35,44
+src/join/index.rs
+  s_ee0a00b403076b::t_22326f15df5b70 2,23-27,34,49,54-58,65,88
+src/join/plan.rs
+  s_ee0a00b403076b::t_c93abe74e8700c 4,110-112,114-121,124,126-127,139-140,144-145,152-153,156
+src/join/runtime.rs
+  s_ee0a00b403076b::t_526b87a400c64c 5,44-45,48,53,57-58,70,77,103-107,116,120,122-123,129-132,135-138,156,165-191,194,200
+src/lib.rs
+  s_ee0a00b403076b::t_d8cd8340eb0a02 1,66-109,117,123-124,131-134
+src/ordered.rs
+  s_ee0a00b403076b::t_4467efb2db9725 1-7
+src/ordered/plan.rs
+  s_ee0a00b403076b::t_07521404df884d 1-124
+src/ordered/runtime.rs
+  s_ee0a00b403076b::t_38f30a81d37673 1-211
+src/ordered/types.rs
+  s_ee0a00b403076b::t_1834a20807fbe9 1-90
+src/ordered/view.rs
+  s_ee0a00b403076b::t_85c46b90402e14 1-179
+src/query.rs
+  s_ee0a00b403076b::t_b3a83895726e1c 2,13,16-22,52,54-55,102-109,114,123-124,129-136,139,141,146-153,167
+src/write_batch.rs
+  s_ee0a00b403076b::t_cd376e010303af 1,16,32,82,99,115,123-126,133
+tests/m3_contracts.rs
+  s_ee0a00b403076b::t_365ee315e53695 1-311
+tests/m3_incrementality.rs
+  s_ee0a00b403076b::t_aefb06004d6968 1-123
+tests/m3_model.rs
+  s_ee0a00b403076b::t_7870d81bf86ffa 1-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "49c56b33d07fd086e091cd45a9e6095a6621a557",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
