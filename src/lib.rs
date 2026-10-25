@@ -1,4 +1,4 @@
-//! Typed collections, synchronous incremental filter/map queries, and bounded delta subscriptions.
+//! Typed collections, synchronous incremental filter/map/join queries, and bounded delta subscriptions.
 //!
 //! Payloads need not implement `Clone`, `Eq`, `Ord`, or serialization. Keys require
 //! `Ord + Clone`. Payloads and query closures must remain logically immutable and
@@ -68,6 +68,7 @@ mod collection;
 mod database;
 mod engine;
 mod error;
+mod join;
 mod journal;
 mod query;
 mod subscription;
@@ -78,6 +79,7 @@ pub use change::{Change, DeltaBatch, Epoch, Poll, Row, Snapshot};
 pub use collection::Collection;
 pub use database::{Commit, Database};
 pub use error::Error;
+pub use join::{Joined, LeftJoined};
 pub use journal::{JournalLimits, ViewOptions};
 pub use query::Query;
 pub use subscription::Subscription;

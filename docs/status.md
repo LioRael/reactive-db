@@ -1,67 +1,77 @@
-# M0/M1 delivery status
+# M0–M2 delivery status
 
 Date: 2026-10-26. Local implementation only; not published.
 
 ## Delivered
 
-- Independent, initialized Git project; one dependency-free library crate, Rust 2024.
-- Rust 1.88 minimum verified locally; development toolchain pinned to 1.99.0.
-- Typed collections with non-Clone/non-Ord/non-Serialize payloads.
-- Heterogeneous write batches, read-your-writes, key validation, sticky failure,
-  net-change coalescing, one atomic publication epoch and fail-stop panic policy.
-- Lazy explicit query plans, shared-node materialization, incremental filter/map,
-  cached removals and lease-based retirement.
-- Immutable snapshots, typed Insert/Update/Remove batches, independent cursors,
-  finite shared history, oversized-batch gaps and atomic resync.
-- Public docs, runnable example, compile-pass/fail consumers, independent model
-  tests and operation-count regression tests.
+- Independent Git project; dependency-free Rust 2024 library, minimum Rust 1.88.
+- Typed collections; payloads require neither Clone, Ord nor Serialize.
+- Heterogeneous atomic write batches, read-your-writes, sticky failure, net-change
+  coalescing and a fail-stop panic policy.
+- Explicit shared query plans, incremental filter/map, cached removals, lease retirement.
+- Incremental inner/left joins with typed selectors, duplicate-key multiplicity,
+  composite pair identities, key migration, self-joins and chained/diamond graphs.
+- Sparse staged side indexes, including updates with no visible output. Both sides
+  reconcile against final batch state before atomic cross-collection publication.
+- Immutable snapshots, typed delta batches, independent bounded cursors, lag/resync.
+- Public docs, two runnable examples, compile-fail contracts and independent model tests.
 
 ## Validation scope
 
-The suite contains 32 tests: 25 unit/integration tests plus 7 rustdoc tests
-(including 6 compile-fail contracts). Model equivalence covers 12 deterministic
-seeds × 500 batches, comparing both materialized snapshots and delta-replayed
-mirrors with independent full recomputation. These are generated regression cases,
-not an exhaustive proof or a coverage percentage.
+48 tests pass: 39 unit/integration tests and 9 rustdoc tests (7 compile-fail).
+The original filter/map oracle covers 12 seeds × 500 batches. The join oracle
+covers 16 seeds × 400 batches, checking four views after every batch: inner,
+left, asymmetric self-inner and asymmetric self-left. Each compares both the
+materialized snapshot and a delta-only replay mirror with independent nested-loop
+full recomputation. Histories include repeated writes, rekeys, removals, duplicate
+keys, dual-side mutations and rejected whole batches. This is regression evidence,
+not exhaustive proof or a coverage percentage.
 
-Native Cargo check/test/clippy, rustfmt, warning-clean rustdoc and the basic
-example passed on local macOS arm64 with Rust 1.99.0. Cargo check/test also passed
-with Rust 1.88.0. No additional toolchain installation was needed. No Linux/Windows
-execution or broad throughput/latency benchmark is claimed.
+Ten directed join tests cover atomic source/join epochs, final before/after
+payloads, first/last-match placeholders, simultaneous key moves, same-batch match
+replacement, unmatched index maintenance, ownership rejection, self-joins and
+nested/shared graph propagation. Additional tests check panic poisoning and lease
+retirement of both derived parents and captured selectors.
 
-The work-count test compares single-row updates at 100 and 10,000 rows: one map
-invocation and fewer than 20 identity clones in either case. It deliberately
-avoids hardware-dependent timing assertions. Another test proves that filter/map
-closures do not execute for cached removals.
+A join work-count regression compares 100 and 10,000 right rows under one matching
+key. Replacing one right row calls only its selector and one downstream projection,
+with fewer than 60 identity clones in either case. Removal reruns neither selector
+nor projection. This protects incremental work bounds without hardware-sensitive
+timing assertions. Large required output fanout still costs proportional work.
 
-## Implementation decisions versus the larger design
+Native Cargo check/test/clippy, rustfmt, warning-clean rustdoc and both examples
+pass on macOS arm64 using pinned Rust 1.99.0. Check/test also pass on minimum Rust
+1.88.0. No toolchain installation, external runtime or new dependency is required.
+No cross-platform execution or broad throughput/latency benchmark is claimed.
 
-M1 rewrites the source/scheduler/subscription representation instead of retaining
-old Ord-on-payload bags or callback delivery. No old source or compatibility module
-was copied. Algorithm/test lessons are recorded in THIRD_PARTY.md. For unary
-M1 operators, keyed before/after changes suffice; general weighted join FactId
-versioning is deferred until M2 rather than represented by an unused abstraction.
+## Implementation decisions
 
-Arc payloads and !Send owner handles follow the accepted design intentionally.
-SubscriptionStart is a public alias for the existing `(Snapshot, Subscription)`
-return shape. There is no API stub that pretends join, sorting or persistence is
-implemented.
+M1 rewrote source/scheduler/subscription representations instead of copying the
+old Ord-on-payload bags or callback delivery. M2 likewise implements sparse keyed
+join reconciliation independently; no original source or compatibility modules
+were copied. Algorithm/test provenance remains in THIRD_PARTY.md.
 
-## Remaining milestones
+Keyed before/after transitions and final side overlays cover join cross terms
+without introducing weighted FactId/version infrastructure. Pair identities are
+deduplicated before comparison against final operands. This is a deliberate
+simplification for keyed relational inputs, not full-query recomputation.
 
-M2: transactional incremental inner/left join, including same-batch cross terms,
-join-key changes and self-joins. M3: group/aggregate, correct distinct, ordered
-views/top-k, ordered deltas and explicit execution budgets. Together those reach
-the complete requested relational core MVP. Optional optimistic, SQLite and UI /
-livequery diagnostic adapters follow afterward.
+Arc payloads and !Send owner handles follow the accepted design. No JS, TS, FFI,
+serde, async runtime, SQLite or diagnostic transport is introduced.
 
-Current limits: eager single-threaded unary graph; O(active nodes) scheduling;
-O(result size) snapshot construction; O(retained history) cursor lookup; row-change
-counts rather than byte budgets. Source tables and retained query plans intentionally
-hold data until their owning lifetimes end. Payload interior mutation is untracked.
+## Remaining milestones and limits
 
-This implementation performed no writes to the original livequery or tanstack-db-rs
-directories. The tanstack-db-rs source/config/document fingerprint comparison was
-unchanged. The livequery comparison detected concurrent additions and edits from
-outside this implementation; those changes were not reverted or incorporated.
-Therefore no claim is made that the livequery directory stayed globally unchanged.
+M3: group/aggregate, correct distinct, ordered views/top-k, ordered deltas and
+explicit execution budgets. These complete the requested relational core MVP.
+Optimistic writes, SQLite persistence and UI/livequery adapters follow separately.
+
+Current limits: eager single-thread graph; O(active nodes) scheduling; O(result
+size) snapshot construction; O(retained history) cursor lookup; count-based rather
+than byte-based journal budgets. Many-to-many output growth and batch preparation
+are unbounded in M2. Sources and retained plans hold data for their lifetimes;
+interior payload mutation is untracked.
+
+No write operation from this implementation targeted livequery or tanstack-db-rs.
+The tanstack-db-rs fingerprint remained unchanged. The livequery fingerprint
+shows concurrent workspace restructuring outside this task; it was neither
+incorporated nor reverted, so global immutability of that directory is not claimed.

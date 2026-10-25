@@ -1,3 +1,4 @@
+use crate::Error;
 use crate::database::Database;
 use crate::engine::{self, Lease, Linear, NodeId, Nodes, Owner, Runtime, State, Transform};
 use std::collections::BTreeMap;
@@ -8,6 +9,9 @@ use std::sync::Arc;
 
 pub(crate) trait Plan {
     fn token(&self) -> &Rc<()>;
+    fn validate(&self, _owner: &Rc<Owner>) -> Result<(), Error> {
+        Ok(())
+    }
     fn build(&self, db: &Database, new: &mut Nodes, order: &mut Vec<NodeId>);
 }
 
@@ -21,7 +25,7 @@ pub(crate) trait Plan {
 pub struct Query<I, T> {
     pub(crate) owner: Rc<Owner>,
     pub(crate) plan: Rc<dyn Plan>,
-    marker: PhantomData<fn() -> (I, T)>,
+    pub(crate) marker: PhantomData<fn() -> (I, T)>,
 }
 impl<I, T> Clone for Query<I, T> {
     fn clone(&self) -> Self {
@@ -38,6 +42,10 @@ impl<I, T> fmt::Debug for Query<I, T> {
     }
 }
 impl<I, T> Query<I, T> {
+    pub(crate) fn validate(&self, owner: &Rc<Owner>) -> Result<(), Error> {
+        self.owner.check(owner)?;
+        self.plan.validate(owner)
+    }
     pub(crate) fn id(&self) -> NodeId {
         engine::node_id(self.plan.token())
     }
@@ -96,6 +104,9 @@ struct LinearPlan<K, A, B> {
     transform: Transform<A, B>,
 }
 impl<K: Ord + Clone + 'static, A: 'static, B: 'static> Plan for LinearPlan<K, A, B> {
+    fn validate(&self, owner: &Rc<Owner>) -> Result<(), Error> {
+        self.parent.validate(owner)
+    }
     fn token(&self) -> &Rc<()> {
         &self.token
     }

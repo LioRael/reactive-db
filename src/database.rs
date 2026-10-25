@@ -116,7 +116,7 @@ impl Database {
         query: Query<I, T>,
         options: ViewOptions,
     ) -> Result<LiveQuery<I, T>, Error> {
-        query.owner.check(&self.owner)?;
+        query.validate(&self.owner)?;
         let _guard = PanicGuard(self.owner.clone());
         self.retire();
         if let Some(node) = self.nodes.get(&query.id())
@@ -188,13 +188,17 @@ impl Database {
                 .checked_add(1)
                 .ok_or(Error::ArithmeticOverflow)?,
         );
+        let mut maintenance = Stages::new();
         for id in &self.order {
             let node = self
                 .nodes
                 .get(id)
                 .expect("execution order references registered nodes");
             if let Some(pending) = node.prepare(&stages) {
-                stages.insert(*id, pending);
+                stages.insert(*id, pending.changes);
+                if let Some(update) = pending.maintenance {
+                    maintenance.insert(*id, update);
+                }
             }
         }
         // No fallible operation remains. Application panics during commit fail-stop.
@@ -203,7 +207,7 @@ impl Database {
                 self.nodes
                     .get_mut(id)
                     .expect("prepared node remains registered")
-                    .commit(pending, epoch);
+                    .commit(pending, maintenance.remove(id), epoch);
             }
         }
         self.epoch = epoch;

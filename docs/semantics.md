@@ -1,4 +1,4 @@
-# M0/M1 semantics
+# M0–M2 semantics
 
 ## Identity and rows
 
@@ -30,6 +30,28 @@ Removing a cached row does not rerun its closures. Whole-table cloning is absent
 staging and output allocation are proportional to touched identities through the
 active graph. The scheduler still visits active graph nodes, so per-write cost
 includes O(active nodes), even when few nodes have affected input.
+
+## Joins
+
+Join selectors take `(&identity, &payload)` and return the same typed `Ord + Clone`
+key. Both input graphs must belong to this database; recursive validation happens
+before any materialization callback. A dropped or foreign right input is rejected,
+even when hidden under a map or nested join.
+
+Inner joins preserve all matched identity pairs, including equal payloads under
+different identities. Left joins preserve matched pairs and one `(left_id, None)`
+row only when that left row has no matches. Both sides may refer to the same plan;
+self-pairs and both orientations are distinct identities. Selectors on the two
+sides may differ. Option-valued join keys use Rust equality: None matches None.
+This is not SQL NULL behavior.
+
+A join-key change retracts old pairs and adds new pairs. A pair that remains valid
+keeps its identity and receives Update if either operand was replaced. One batch
+contains at most one final transition per pair identity. Same-batch dual updates
+and cross-collection writes never expose intermediate mixed versions. Chained
+joins consume the same final batch. No output changes means no journal record,
+but side indexes still advance. Large fanout uses the normal bounded-journal lag
+contract; output tables and per-write preparation have no execution budget yet.
 
 ## Panics
 

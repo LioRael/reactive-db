@@ -1,18 +1,20 @@
-# M0/M1 implementation architecture
+# M0–M2 implementation architecture
 
-The accepted full design includes future join/aggregate/order operators. This file
+The accepted full design includes future aggregate/order operators. This file
 describes the implemented slice only, not those planned capabilities.
 
 - `database.rs`: unique owner, instance checks, graph registration, lease retirement,
   synchronous write preparation and publication.
 - `write_batch.rs`: heterogeneous sparse source patches with read-your-writes and
   sticky invalidation. Source payload types are checked at the public interface.
-- `query.rs`: typed lazy source/linear plans. Clones share a plan token; parent-first
+- `query.rs`: typed lazy source/linear plans and recursive owner validation. Clones share a plan token; parent-first
   construction creates a topological order. Initial construction runs once per
   explicitly shared node.
 - `engine.rs`: private erased node storage with checked Any downcasts, typed row
   state, and cached-output incremental filter/map evaluators. No unsafe cast or
   dynamic JSON value model is used.
+- `join/`: typed two-parent plans, sparse side indexes, pair reconciliation and
+  inner/left output types.
 - `view.rs`, `subscription.rs`, `journal.rs`: immutable snapshots, bounded shared
   delta history, cursor initialization, lag detection and resync.
 - `change.rs`: typed row transitions and database-local epochs.
@@ -30,10 +32,37 @@ describes the implemented slice only, not those planned capabilities.
 BTreeMap mutations and destructors in the final phase may still panic. A panic
 poisons the Database; there is no recovery claim. Allocation exhaustion may abort.
 
-The M1 graph is unary and keyed, so it does not yet need the general weighted
-FactId/version representation proposed for joins. Source before/after values and
-cached output identities suffice without requiring T: Ord. M2 must implement
-join staging and the cross term; this release does not claim that work is done.
+## Indexed joins
+
+Each side stores identity → (cached join key, Arc payload), plus join key → ordered
+identity set. A batch stages sparse index removals/additions and final row entries;
+it never clones a complete side, bucket or output table. Removals reuse cached
+keys. Only inserted/replaced rows invoke selectors.
+
+For each changed left identity, collect pairs from its old right bucket and its
+final right bucket. For each changed right identity, do the symmetric lookup.
+Deduplicate candidate pair identities, then compare committed output against the
+final overlays on both sides. This includes simultaneous insert/update cross terms
+exactly once, including self-joins. It is equivalent to keyed differential join
+maintenance without a public weighted bag or FactId/version layer. Unchanged
+operand Arc identities reuse cached output and do not publish redundant updates.
+
+Left joins additionally consider a placeholder for every affected left identity.
+Its final right bucket cardinality decides whether it exists. Cardinality checks
+use old/removed/added set sizes rather than scanning the whole bucket. A last-match
+removal or first-match insertion publishes the placeholder transition together
+with matched-pair transitions. Same-batch replacement of a match never exposes a
+transient placeholder.
+
+Prepared output and operator-maintenance patches are separate. Even when a join
+produces no output delta, changed unmatched rows must commit their indexes for a
+later matching write. Downstream nodes consume final pending output in topological
+order; all source, index, output and journal changes commit under one epoch.
+
+Initial construction costs input indexing plus full result construction. Updates
+visit changed inputs and their matching old/final fanout, with ordered-map/set
+lookup and deduplication overhead. Many-to-many fanout can be quadratic in input
+size and is not capped in M2. Scheduler overhead remains O(active nodes).
 
 ## Ownership and implementation choices
 
@@ -52,6 +81,6 @@ Arc<T> in the accepted data interface is deliberate shared snapshot ownership;
 Database and handles use Rc internally to enforce owner-thread execution. These
 are explicit design choices, not accidental Clone/Send requirements on user rows.
 
-Future work should add operator-specific staged state rather than reverting to
+Future work should extend operator-specific staged state rather than reverting to
 whole-table clone-on-write. It should not introduce JS opcode dispatch, upstream
 runtime identity or a public generic backend plugin framework.

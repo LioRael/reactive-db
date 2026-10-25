@@ -1,6 +1,6 @@
 # Source provenance
 
-M0/M1 is a new implementation of the accepted native Rust design. No source
+M0–M2 is a new implementation of the accepted native Rust design. No source
 files, vendor packages, bridge modules, or JS compatibility code were copied
 from either original project. The new crate has no third-party dependencies.
 
@@ -23,7 +23,7 @@ The reference project attributes its incremental algorithm design to TanStack DB
 commit `37b8fc2c5abd08e9128ec3606c6534aaec3ae67e` (MIT). Those records remain
 in the untouched original project. Future code extraction must preserve the
 licenses/copyright notices for the actual copied portions; this file does not
-relicense or erase the provenance of future join/aggregate implementations.
+relicense or erase the provenance of future extracted implementations.
 
 The livequery project remains separate. Its inspection API and JSON transport are
 not dependencies or source inputs of this crate.

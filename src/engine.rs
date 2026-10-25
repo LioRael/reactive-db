@@ -71,7 +71,7 @@ impl<K: Ord + Clone, T> State<K, T> {
             .collect::<Vec<_>>()
             .into()
     }
-    fn apply(&mut self, changes: Pending<K, T>, epoch: Epoch) {
+    pub(crate) fn apply(&mut self, changes: Pending<K, T>, epoch: Epoch) {
         for change in changes.iter() {
             if let Some(value) = change.after() {
                 self.rows.insert(change.id().clone(), value.clone());
@@ -85,14 +85,19 @@ impl<K: Ord + Clone, T> State<K, T> {
     }
 }
 
+pub(crate) struct Prepared {
+    pub changes: Box<dyn Any>,
+    pub maintenance: Option<Box<dyn Any>>,
+}
+
 pub(crate) trait Node {
     fn state(&self) -> &dyn Any;
     fn state_mut(&mut self) -> &mut dyn Any;
     fn alive(&self) -> bool;
     fn source_changes(&self, patch: Box<dyn Any>) -> Box<dyn Any>;
-    fn prepare(&self, stages: &Stages) -> Option<Box<dyn Any>>;
+    fn prepare(&self, stages: &Stages) -> Option<Prepared>;
     fn has_changes(&self, pending: &dyn Any) -> bool;
-    fn commit(&mut self, pending: Box<dyn Any>, epoch: Epoch);
+    fn commit(&mut self, pending: Box<dyn Any>, maintenance: Option<Box<dyn Any>>, epoch: Epoch);
 }
 
 pub(crate) enum Lease {
@@ -131,11 +136,14 @@ impl<K: Ord + Clone + 'static, T: 'static> Node for Runtime<K, T> {
             .expect("typed source patch matches its registered node");
         Box::new(self.state.changes(patch))
     }
-    fn prepare(&self, stages: &Stages) -> Option<Box<dyn Any>> {
+    fn prepare(&self, stages: &Stages) -> Option<Prepared> {
         self.evaluator
             .as_ref()?
             .prepare(&self.state, stages)
-            .map(|pending| Box::new(pending) as Box<dyn Any>)
+            .map(|pending| Prepared {
+                changes: Box::new(pending),
+                maintenance: None,
+            })
     }
     fn has_changes(&self, pending: &dyn Any) -> bool {
         !pending
@@ -143,7 +151,11 @@ impl<K: Ord + Clone + 'static, T: 'static> Node for Runtime<K, T> {
             .expect("typed pending batch matches its node")
             .is_empty()
     }
-    fn commit(&mut self, pending: Box<dyn Any>, epoch: Epoch) {
+    fn commit(&mut self, pending: Box<dyn Any>, maintenance: Option<Box<dyn Any>>, epoch: Epoch) {
+        assert!(
+            maintenance.is_none(),
+            "linear/source nodes have no staged operator state"
+        );
         let pending = *pending
             .downcast::<Pending<K, T>>()
             .expect("typed pending batch matches its node");

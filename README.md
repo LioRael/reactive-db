@@ -1,7 +1,7 @@
 # reactive-db
 
-Experimental native Rust reactive collections. M0/M1 are implemented: typed
-collections, atomic in-memory write batches, incremental filter/map views, and
+Experimental native Rust reactive collections. M0–M2 are implemented: typed
+collections, atomic in-memory write batches, incremental filter/map and inner/left join views, and
 bounded delta subscriptions. This is not yet the complete relational MVP.
 
 Zero dependencies. Safe Rust. No JS, FFI, serde requirement, background thread,
@@ -32,7 +32,7 @@ fn main() -> Result<(), reactive_db::Error> {
 }
 ```
 
-Run `cargo run --example basic`. Read [semantics](docs/semantics.md),
+Run `cargo run --example basic` or `cargo run --example joins`. Read [semantics](docs/semantics.md),
 [implementation architecture](docs/architecture.md), and [delivery status](docs/status.md).
 
 ## Contracts
@@ -74,5 +74,21 @@ deltas; work-count tests check single-row updates at different collection sizes.
 Rustdoc includes compile-fail contracts. No external services or oracle runtime
 are required.
 
-Join, group/aggregate, sort/top-k, optimistic writes, persistence and UI adapters
-are deliberately not implemented in M1. Nothing has been published.
+Group/aggregate, sort/top-k, optimistic writes, persistence and UI adapters
+remain future milestones. Nothing has been published.
+
+## Typed joins
+
+```rust
+let query = tasks.query().left_join_on(
+    projects.query(),
+    |_, task| task.project,
+    |project_id, _| *project_id,
+).map(|pair| (pair.left.title.clone(), pair.right.as_deref().cloned()));
+```
+
+`join_on` returns identities `(left_id, right_id)` and `Joined<L, R>`.
+`left_join_on` returns `(left_id, Option<right_id>)` and `LeftJoined<L, R>`.
+Duplicate keys produce all matching pairs; unmatched left rows have exactly one
+`None` placeholder. Both sides may change in the same write, including self-joins.
+Only final pair transitions are published. See the complete `joins` example.
