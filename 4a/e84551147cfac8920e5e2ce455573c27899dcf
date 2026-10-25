@@ -1,0 +1,55 @@
+Cargo.lock
+  s_ee0a00b403076b::t_53731e71a71fee 5-235,239-420
+Cargo.toml
+  s_ee0a00b403076b::t_bc479b7d1363ee 17-27
+README.md
+  s_ee0a00b403076b::t_53b488c92e0a76 8,77,120-129
+THIRD_PARTY.md
+  s_ee0a00b403076b::t_0cb8dd64cee2a3 5-7
+benches/core.rs
+  s_ee0a00b403076b::t_38de6ef908c795 1-404
+benches/memory.rs
+  s_ee0a00b403076b::t_768f0e04cda175 1-89
+benches/results/macos-m2-pro.csv
+  s_ee0a00b403076b::t_28f02b80c684dc 1-51
+benches/results/memory.csv
+  s_ee0a00b403076b::t_3a3bdbe9573d5f 1-11
+benches/results/metadata.json
+  s_ee0a00b403076b::t_671655e6e93f6b 1-48
+docs/architecture.md
+  s_ee0a00b403076b::t_6fdbabe4caa93c 48-51,82-83,131-134
+docs/audit-performance.md
+  s_ee0a00b403076b::t_29cccb037cb8b8 1-155
+docs/semantics.md
+  s_ee0a00b403076b::t_eb149002d45ea5 140-142
+docs/status.md
+  s_ee0a00b403076b::t_b8b32b197256a7 7,24,48-50,55-56
+src/budget.rs
+  s_ee0a00b403076b::t_9a7c205f018098 2,39,46,49-56
+src/database.rs
+  s_ee0a00b403076b::t_d2ebf04a434d83 255,257-259
+src/join/index.rs
+  s_ee0a00b403076b::t_326a7fa0a9e5ab 3,129-172
+src/join/runtime.rs
+  s_ee0a00b403076b::t_046bce61927f56 127-128,137,139,152,159-166
+src/query.rs
+  s_ee0a00b403076b::t_678fa270f6dadb 54-56
+tests/audit_regressions.rs
+  s_ee0a00b403076b::t_3c214aba2b5770 1-212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ae84551147cfac8920e5e2ce455573c27899dcf",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
