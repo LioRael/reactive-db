@@ -1,0 +1,71 @@
+.gitignore
+  s_ee0a00b403076b::t_f8266cd1128e58 1
+Cargo.lock
+  s_ee0a00b403076b::t_a409962a650e08 1-7
+Cargo.toml
+  s_ee0a00b403076b::t_c9d3b5141e51c1 1-16
+LICENSE
+  s_ee0a00b403076b::t_eb0f7301f7a088 1-21
+README.md
+  s_ee0a00b403076b::t_cf298a09627c50 1-78
+THIRD_PARTY.md
+  s_ee0a00b403076b::t_a765e209b670df 1-29
+docs/architecture.md
+  s_ee0a00b403076b::t_29c6a49628f9e5 1-57
+docs/semantics.md
+  s_ee0a00b403076b::t_570633fe132efb 1-75
+docs/status.md
+  s_ee0a00b403076b::t_635f359c3c8bb4 1-67
+examples/basic.rs
+  s_ee0a00b403076b::t_1822fb036338f8 1-62
+rust-toolchain.toml
+  s_ee0a00b403076b::t_14fdb27ad4fea5 1-4
+src/change.rs
+  s_ee0a00b403076b::t_7bc6da6a5b157e 1-173
+src/collection.rs
+  s_ee0a00b403076b::t_39a33ec7060d89 1-41
+src/database.rs
+  s_ee0a00b403076b::t_7b45c379ff7a5d 1-254
+src/engine.rs
+  s_ee0a00b403076b::t_0d058e059e5aaa 1-186
+src/error.rs
+  s_ee0a00b403076b::t_6d65b38f16b54b 1-49
+src/journal.rs
+  s_ee0a00b403076b::t_bd255e4529eaf1 1-92
+src/lib.rs
+  s_ee0a00b403076b::t_a8db141cc68e7e 1-85
+src/query.rs
+  s_ee0a00b403076b::t_374fbb838b45e0 1-131
+src/subscription.rs
+  s_ee0a00b403076b::t_fbcf23a723b15d 1-67
+src/view.rs
+  s_ee0a00b403076b::t_4e36f3840472e7 1-65
+src/write_batch.rs
+  s_ee0a00b403076b::t_608c147bd40776 1-128
+tests/consumer.rs
+  s_ee0a00b403076b::t_3d915e750b277a 1-284
+tests/incrementality.rs
+  s_ee0a00b403076b::t_2abd4b6195def6 1-85
+tests/lifecycle.rs
+  s_ee0a00b403076b::t_09c313c08b907f 1-149
+tests/model_equivalence.rs
+  s_ee0a00b403076b::t_ecd9c027f3738c 1-80
+tests/subscriptions.rs
+  s_ee0a00b403076b::t_9f075e4b0ccce3 1-185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "12b6645a88dc621df41479833f6b0d11e1b49517",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
