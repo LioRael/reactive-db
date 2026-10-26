@@ -1,0 +1,31 @@
+tests/join_match_reuse.rs
+  s_ee0a00b403076b::t_e480f0edfd24d1 1-6,43-94,96-149
+  s_ee0a00b403076b::t_f801a9c4409c1f 7-42,95
+  s_ee0a00b403076b::t_28903fa5650dc9 150-177
+benchmarks/join_match_reuse.rs
+  s_ee0a00b403076b::t_4eee367adcc31f 1-225
+benchmarks/join_match_reuse_probe.patch
+  s_ee0a00b403076b::t_afbbc7e7259361 1-83
+docs/join-match-reuse.md
+  s_ee0a00b403076b::t_5509cc2fdb79a3 1-115
+src/join/output.rs
+  s_ee0a00b403076b::t_455077f5adbfcf 45,65-67,84-86
+src/join/runtime.rs
+  s_ee0a00b403076b::t_206121088bf900 129-139,150-153,156-158,199-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15ac7f7064207481b383fa490c446701bc98e8b5",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
