@@ -240,7 +240,7 @@ impl<I: Ord + Clone, T, J: Ord + Clone> Overlay<'_, I, T, J> {
         key: &J,
         cache: &mut BTreeMap<J, Vec<&'a I>>,
         meter: &mut Meter,
-        mut visit: impl FnMut(&I),
+        mut visit: impl FnMut(&'a I),
     ) -> Result<(), Error> {
         if self.patch.removed_count(key) == 0 && self.patch.added_count(key) == 0 {
             for id in self.base.members(key) {

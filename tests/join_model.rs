@@ -187,3 +187,65 @@ fn random_cross_collection_and_self_joins_match_full_recomputation() -> Result<(
     }
     Ok(())
 }
+
+#[test]
+fn dense_both_side_rekeys_and_empty_buckets_match_full_recomputation() -> Result<(), Error> {
+    let mut db = Database::new();
+    let l = db.create_collection::<u32, (u32, u64)>("left")?;
+    let r = db.create_collection::<u32, (u32, u64)>("right")?;
+    let inner = db.materialize(
+        l.query()
+            .join_on(r.query(), |_, v| v.0, |_, v| v.0)
+            .map(|p| (*p.left, Some(*p.right))),
+    )?;
+    let outer = db.materialize(
+        l.query()
+            .left_join_on(r.query(), |_, v| v.0, |_, v| v.0)
+            .map(|p| (*p.left, p.right.as_deref().copied())),
+    )?;
+    let (_, mut si) = inner.subscribe(&mut db)?;
+    let (_, mut so) = outer.subscribe(&mut db)?;
+    let (mut mi, mut mo) = (BTreeMap::new(), BTreeMap::new());
+    let (mut left, mut right) = (Input::new(), Input::new());
+    for step in 0..8_u64 {
+        db.write(|tx| {
+            for id in 0..16 {
+                let value = ((step % 2) as u32, step);
+                if left.insert(id, value).is_some() {
+                    tx.replace(&l, id, value)?;
+                } else {
+                    tx.insert(&l, id, value)?;
+                }
+            }
+            for id in 0..128 {
+                if step == 3 || step == 7 {
+                    if right.remove(&id).is_some() {
+                        tx.remove(&r, &id)?;
+                    }
+                } else {
+                    let value = ((step % 2) as u32, step + u64::from(id));
+                    if right.insert(id, value).is_some() {
+                        tx.replace(&r, id, value)?;
+                    } else {
+                        tx.insert(&r, id, value)?;
+                    }
+                }
+            }
+            Ok(())
+        })?;
+        let (expected_inner, expected_outer) = recompute(&left, &right, 0);
+        verify(
+            &db,
+            &inner,
+            &mut si,
+            &mut mi,
+            expected_inner
+                .into_iter()
+                .map(|((l, r), v)| ((l, r.unwrap()), v))
+                .collect(),
+            db.epoch()?,
+        )?;
+        verify(&db, &outer, &mut so, &mut mo, expected_outer, db.epoch()?)?;
+    }
+    Ok(())
+}

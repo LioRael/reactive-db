@@ -1,3 +1,4 @@
+use super::candidates::Candidates;
 use super::index::{Index, Patch};
 use super::output::Mode;
 use crate::engine::Token;
@@ -5,7 +6,7 @@ use crate::engine::{Node, NodeId, Pending, Prepared, Stages, State};
 use crate::{Change, Epoch};
 use crate::{Error, budget::Meter};
 use std::any::Any;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::rc::Weak;
 use std::sync::Arc;
 
@@ -127,23 +128,23 @@ impl<
         let right_patch = self.right.stage(right_changes, meter)?;
         let left = self.left.overlay(&left_patch);
         let right = self.right.overlay(&right_patch);
-        let mut candidates = BTreeSet::new();
+        let mut candidates = Candidates::Empty;
         let mut left_buckets = BTreeMap::new();
         let mut right_buckets = BTreeMap::new();
         for li in left_patch.ids() {
             if let Some(old) = self.left.rows.get(li) {
                 for ri in self.right.members(&old.key) {
                     meter.work()?;
-                    candidates.insert((li.clone(), Some(ri.clone())));
+                    candidates.push((li, Some(ri)));
                 }
             }
             if let Some(new) = left.get(li) {
                 right.visit_members(&new.key, &mut right_buckets, meter, |ri| {
-                    candidates.insert((li.clone(), Some(ri.clone())));
+                    candidates.push((li, Some(ri)));
                 })?;
             }
             if M::OUTER {
-                candidates.insert((li.clone(), None));
+                candidates.push((li, None));
             }
         }
         for ri in right_patch.ids() {
@@ -155,16 +156,16 @@ impl<
                 .flat_map(|old| self.left.members(&old.key));
             for li in old_left {
                 meter.work()?;
-                candidates.insert((li.clone(), Some(ri.clone())));
+                candidates.push((li, Some(ri)));
                 if M::OUTER {
-                    candidates.insert((li.clone(), None));
+                    candidates.push((li, None));
                 }
             }
             if let Some(new) = right.get(ri) {
                 left.visit_members(&new.key, &mut left_buckets, meter, |li| {
-                    candidates.insert((li.clone(), Some(ri.clone())));
+                    candidates.push((li, Some(ri)));
                     if M::OUTER {
-                        candidates.insert((li.clone(), None));
+                        candidates.push((li, None));
                     }
                 })?;
             }
@@ -172,13 +173,13 @@ impl<
         // Pair identities deduplicate the two sides, including the simultaneous
         // delta cross term. Final overlays prevent transient outer placeholders.
         let mut changes = Vec::new();
-        for (li, ri) in candidates {
+        for (li, ri) in candidates.into_pairs() {
             meter.work()?;
-            let Some(id) = M::id(&li, ri.as_ref()) else {
+            let Some(id) = M::id(li, ri) else {
                 continue;
             };
             let before = self.state.rows.get(&id).cloned();
-            let desired = left.get(&li).and_then(|l| match &ri {
+            let desired = left.get(li).and_then(|l| match ri {
                 Some(ri) => right
                     .get(ri)
                     .filter(|r| l.key == r.key)

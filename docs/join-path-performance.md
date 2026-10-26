@@ -1,3 +1,5 @@
+> 历史报告：后续短路径与大 fanout 优化及配对验证见 [新报告](fanout-performance.md)。
+
 # reactive-db 短路径与 join 汇合优化
 
 日期：2026-10-26。直接基线 `39804b1`。本轮只修改 reactive-db 和任务验证目录，未改动 livequery、tanstack-db-rs。继续使用纯安全 Rust、零运行时依赖，公共 API 不变。

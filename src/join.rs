@@ -1,3 +1,4 @@
+mod candidates;
 mod index;
 mod output;
 mod plan;

@@ -145,3 +145,6 @@ CPU sampling and separate measurements of queue compaction and node lookup.
 
 See [short paths and join convergence](docs/join-path-performance.md) for the
 ID-only dequeue interface, single-row join patches and before/after measurements.
+
+The [paired performance validation](docs/fanout-performance.md) separates
+short-path noise from large-fanout improvements using A/A controls and paired runs.

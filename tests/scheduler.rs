@@ -401,3 +401,56 @@ fn converging_join_budget_rejection_preserves_all_subscription_epochs() -> Resul
     }
     Ok(())
 }
+
+#[test]
+fn inline_first_commit_handles_cancelled_sources_and_atomic_multi_source_retry() -> Result<(), Error>
+{
+    let mut db = Database::new();
+    let a = db.create_collection::<u64, i64>("a")?;
+    let b = db.create_collection::<u64, i64>("b")?;
+    let cancelled = db.create_collection::<u64, i64>("cancelled")?;
+    let av = db.materialize(a.query())?;
+    let bv = db.materialize(b.query())?;
+    let (_, mut sa) = av.subscribe(&mut db)?;
+    let (_, mut sb) = bv.subscribe(&mut db)?;
+    let measured = db.write(|tx| {
+        tx.insert(&cancelled, 0, 9)?;
+        tx.remove(&cancelled, &0)?;
+        tx.insert(&a, 0, 1)?;
+        tx.insert(&b, 0, 2)
+    })?;
+    assert!(cancelled.get(&db, &0)?.is_none());
+    for sub in [&mut sa, &mut sb] {
+        assert!(matches!(sub.poll(&db)?, Poll::Delta(_)));
+    }
+    db.set_execution_budget(ExecutionBudget {
+        max_work: measured.stats.work - 1,
+        ..Default::default()
+    })?;
+    let update = |tx: &mut reactive_db::WriteBatch<'_>| {
+        tx.insert(&cancelled, 0, 9)?;
+        tx.remove(&cancelled, &0)?;
+        tx.replace(&a, 0, 3)?;
+        tx.replace(&b, 0, 4)
+    };
+    assert!(matches!(db.write(update), Err(Error::BudgetExceeded(_))));
+    assert_eq!(db.epoch()?, measured.epoch);
+    assert_eq!(*a.get(&db, &0)?.unwrap(), 1);
+    assert_eq!(*b.get(&db, &0)?.unwrap(), 2);
+    for sub in [&mut sa, &mut sb] {
+        assert!(matches!(sub.poll(&db)?, Poll::Idle));
+    }
+    db.set_execution_budget(ExecutionBudget {
+        max_work: measured.stats.work,
+        ..Default::default()
+    })?;
+    let retry = db.write(update)?;
+    assert_eq!(retry.stats, measured.stats);
+    for sub in [&mut sa, &mut sb] {
+        let Poll::Delta(delta) = sub.poll(&db)? else {
+            panic!("missing source delta")
+        };
+        assert_eq!(delta.to_epoch, retry.epoch);
+    }
+    Ok(())
+}

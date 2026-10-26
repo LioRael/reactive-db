@@ -148,3 +148,164 @@ fn final_join_lease_releases_both_derived_parents_and_index_captures() -> Result
     assert!(weak_capture.upgrade().is_none());
     Ok(())
 }
+
+#[test]
+fn fanout_candidate_enumeration_does_not_clone_duplicate_identities() -> Result<(), Error> {
+    let mut db = Database::new();
+    let left = db.create_collection::<Id, u32>("left")?;
+    let right = db.create_collection::<Id, u32>("right")?;
+    const FANOUT: u32 = 1024;
+    db.write(|tx| {
+        tx.insert(&left, Id(0), 0)?;
+        for id in 0..FANOUT {
+            tx.insert(&right, Id(id), 0)?;
+        }
+        Ok(())
+    })?;
+    let view = db.materialize(
+        left.query()
+            .left_join_on(right.query(), |_, _| (), |_, _| ()),
+    )?;
+    CLONES.with(|count| count.set(0));
+    let commit = db.write(|tx| tx.replace(&left, Id(0), 1))?;
+    let clones = CLONES.with(Cell::get);
+    // Each final pair needs owned output and state identities. Enumerating the
+    // same old/new pair should not clone identities again before deduplication.
+    assert!(clones <= 4 * FANOUT as usize + 32, "{clones} ID clones");
+    assert_eq!(commit.stats.output_changes, FANOUT as usize + 1);
+    let rows = view.snapshot(&db)?.rows;
+    assert_eq!(rows.len(), FANOUT as usize);
+    assert!(rows.iter().all(|row| *row.value.left == 1));
+    Ok(())
+}
+
+#[test]
+fn rejected_large_fanout_releases_staged_payload_and_publishes_nothing() -> Result<(), Error> {
+    use reactive_db::ExecutionBudget;
+    use std::sync::Arc;
+    let mut db = Database::new();
+    let left = db.create_collection::<u64, Arc<u64>>("left")?;
+    let right = db.create_collection::<u64, ()>("right")?;
+    db.write(|tx| {
+        tx.insert(&left, 0, Arc::new(0))?;
+        for id in 0..1024 {
+            tx.insert(&right, id, ())?;
+        }
+        Ok(())
+    })?;
+    let view = db.materialize(
+        left.query()
+            .left_join_on(right.query(), |_, _| (), |_, _| ()),
+    )?;
+    let (_, mut sub) = view.subscribe(&mut db)?;
+    let epoch = db.epoch()?;
+    db.set_execution_budget(ExecutionBudget {
+        max_output_changes: 1000,
+        ..Default::default()
+    })?;
+    let value = Arc::new(1);
+    let weak = Arc::downgrade(&value);
+    assert!(matches!(
+        db.write(|tx| tx.replace(&left, 0, value)),
+        Err(Error::BudgetExceeded(_))
+    ));
+    assert!(weak.upgrade().is_none());
+    assert_eq!(db.epoch()?, epoch);
+    assert!(matches!(sub.poll(&db)?, Poll::Idle));
+    assert!(
+        view.snapshot(&db)?
+            .rows
+            .iter()
+            .all(|row| **row.value.left == 0)
+    );
+    db.set_execution_budget(ExecutionBudget::default())?;
+    db.write(|tx| tx.replace(&left, 0, Arc::new(2)))?;
+    let Poll::Delta(delta) = sub.poll(&db)? else {
+        panic!("missing retry delta")
+    };
+    assert_eq!(delta.changes.len(), 1024);
+    assert_eq!(delta.to_epoch, db.epoch()?);
+    Ok(())
+}
+
+#[test]
+fn equal_ordered_ids_preserve_first_candidate_representation() -> Result<(), Error> {
+    use std::cmp::Ordering;
+    #[derive(Clone, Debug)]
+    struct Key {
+        id: u32,
+        label: &'static str,
+    }
+    impl PartialEq for Key {
+        fn eq(&self, other: &Self) -> bool {
+            self.id == other.id
+        }
+    }
+    impl Eq for Key {}
+    impl PartialOrd for Key {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl Ord for Key {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.id.cmp(&other.id)
+        }
+    }
+    let mut db = Database::new();
+    let left = db.create_collection::<Key, u32>("left")?;
+    let right = db.create_collection::<Key, u32>("right")?;
+    db.write(|tx| {
+        tx.insert(
+            &left,
+            Key {
+                id: 0,
+                label: "old-left",
+            },
+            0,
+        )?;
+        for id in 0..64 {
+            tx.insert(
+                &right,
+                Key {
+                    id,
+                    label: "old-right",
+                },
+                0,
+            )?;
+        }
+        Ok(())
+    })?;
+    let view = db.materialize(left.query().join_on(right.query(), |_, _| (), |_, _| ()))?;
+    let (_, mut sub) = view.subscribe(&mut db)?;
+    db.write(|tx| {
+        tx.replace(
+            &left,
+            Key {
+                id: 0,
+                label: "new-left",
+            },
+            1,
+        )?;
+        for id in 0..64 {
+            tx.replace(
+                &right,
+                Key {
+                    id,
+                    label: "new-right",
+                },
+                1,
+            )?;
+        }
+        Ok(())
+    })?;
+    let Poll::Delta(delta) = sub.poll(&db)? else {
+        panic!("missing two-sided delta")
+    };
+    assert_eq!(delta.changes.len(), 64);
+    for change in delta.changes.iter() {
+        let (l, r) = change.id();
+        assert_eq!((l.label, r.label), ("new-left", "old-right"));
+    }
+    Ok(())
+}

@@ -185,3 +185,17 @@ key and optional new entry. Empty/multi-row input retains the original batch map
 Overlay membership, pair enumeration, work charging and prepare/commit separation
 are shared. Single-row commit removes old membership before adding the new one,
 including same-key replacements; no old key/payload is retained as a cache shortcut.
+
+## Borrowed join candidates and first commit identity
+
+A write keeps its first commit identity inline; remaining sources and derived
+nodes keep their original commit order in the spill vector. The atomic
+prepare/commit boundary and per-node charging are unchanged.
+
+Join candidates borrow input/index identities during preparation. An empty or
+single unique pair stays inline. On a second distinct pair they spill into a
+vector, then stable sorting/deduplication preserves the first representation
+of equal identities. Only output identities are cloned. Temporary candidate
+slots scale with pre-deduplication visits, and stable sort may use additional
+scratch space; neither buffer persists beyond the write. Budget counters still
+charge enumeration and unique evaluation, not comparison or byte costs.

@@ -197,6 +197,7 @@ impl Database {
             (batch.patches, batch.meter)
         };
         let mut stages = Stages::new();
+        let mut first_commit = None;
         let mut commits = Vec::new();
         for (id, patch) in patches {
             let node = self
@@ -206,16 +207,20 @@ impl Database {
             let changes = node.source_changes(patch, &mut meter)?;
             if node.has_changes(changes.as_ref()) {
                 stages.insert(id, changes);
-                commits.push(id);
+                if first_commit.is_none() {
+                    first_commit = Some(id);
+                } else {
+                    commits.push(id);
+                }
             }
         }
-        if commits.is_empty() {
+        let Some(first_commit) = first_commit else {
             return Ok(Commit {
                 epoch: self.epoch,
                 changed: false,
                 stats: meter.stats,
             });
-        }
+        };
         let epoch = Epoch(
             self.epoch
                 .0
@@ -224,7 +229,7 @@ impl Database {
         );
         let mut maintenance = Stages::new();
         let mut ready = crate::scheduler::Queue::new();
-        for &id in &commits {
+        for id in std::iter::once(first_commit).chain(commits.iter().copied()) {
             meter.work()?;
             self.scheduler.propagate(id, &mut ready, &mut meter)?;
         }
@@ -247,7 +252,7 @@ impl Database {
             }
         }
         // No fallible operation remains. Maintenance-only stages must commit too.
-        for id in commits {
+        for id in std::iter::once(first_commit).chain(commits) {
             let pending = stages.remove(&id).expect("commit has a prepared stage");
             self.nodes
                 .get_mut(&id)
