@@ -1,0 +1,45 @@
+README.md
+  s_ee0a00b403076b::t_3dc25545719d0d 148-150
+benchmarks/paired.rs
+  s_ee0a00b403076b::t_e2991a743d8d9a 1-150
+docs/architecture.md
+  s_ee0a00b403076b::t_7f3b9c9aa2d9e7 188-201
+docs/fanout-performance.md
+  s_ee0a00b403076b::t_0560f61ffcad43 1-124
+docs/join-path-performance.md
+  s_ee0a00b403076b::t_3604385a18260a 1-2
+docs/status.md
+  s_ee0a00b403076b::t_d9cd408fe15f02 24,104-107
+src/database.rs
+  s_ee0a00b403076b::t_19a36888998f7f 200,210-214,217,223,232,255
+src/join.rs
+  s_ee0a00b403076b::t_3a447739129afe 1
+src/join/candidates.rs
+  s_ee0a00b403076b::t_de5e6f2f7ebf34 1-36
+src/join/index.rs
+  s_ee0a00b403076b::t_5c3d5d0b1ffc58 243
+src/join/runtime.rs
+  s_ee0a00b403076b::t_af55347ef3bf67 1,9,131,138,143,147,159,161,166,168,176,178,182
+tests/join_incrementality.rs
+  s_ee0a00b403076b::t_288dd35cc4a209 151-311
+tests/join_model.rs
+  s_ee0a00b403076b::t_93b33a8e01cada 190-251
+tests/scheduler.rs
+  s_ee0a00b403076b::t_c25a52bdbc1af9 404-456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "349ca509837cba85efacded153a9b70d7c99ea4c",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
