@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-103 tests pass: 90 unit/integration and 13 rustdoc tests, including 10 compile-fail
+105 tests pass: 92 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -109,3 +109,7 @@ stable deduplication and inline first commit identity. See
 Single-entry source patches construct their shared publication directly and move
 the owned identity. See [rebuilt-instance performance validation](rebuilt-performance.md)
 for creation-order crossover, role reversal, process repeats and residual limits.
+
+Single-output filter/map preparation now constructs the shared delta directly
+through a private non-inlined helper. See [wide graph allocation study](wide-performance.md)
+for allocator perturbations, role crossover, independent binaries and limitations.

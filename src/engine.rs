@@ -12,6 +12,13 @@ pub(crate) use crate::stages::Stages;
 pub(crate) type Nodes = BTreeMap<NodeId, Box<dyn Node>>;
 pub(crate) type Patch<K, T> = BTreeMap<K, Option<Arc<T>>>;
 pub(crate) type Pending<K, T> = Arc<[Change<K, T>]>;
+
+// Keep the one-row allocation separate from the filter rejection path.
+#[inline(never)]
+fn single_pending<K, T>(change: Change<K, T>) -> Pending<K, T> {
+    Arc::from([change])
+}
+
 pub(crate) type Transform<A, B> = Rc<dyn Fn(&Arc<A>) -> Option<Arc<B>>>;
 
 #[derive(Debug)]
@@ -260,6 +267,9 @@ impl<K: Ord + Clone + 'static, A: 'static, B: 'static> Evaluate<K, B> for Linear
             let after = change.after().and_then(|row| (self.transform)(row));
             if let Some(change) = Change::between(change.id().clone(), before, after) {
                 meter.output()?;
+                if input.len() == 1 {
+                    return Ok(Some(single_pending(change)));
+                }
                 changes.push(change);
             }
         }
@@ -402,5 +412,110 @@ mod source_patch_tests {
             "owned source ID must not be cloned for publication"
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod linear_patch_tests {
+    use super::*;
+    use crate::ExecutionBudget;
+
+    #[test]
+    fn single_and_multi_input_filter_map_match_an_independent_model() -> Result<(), Error> {
+        for old in [None, Some(-2_i64), Some(2)] {
+            for new in [None, Some(-3_i64), Some(3)] {
+                if old.is_none() && new.is_none() {
+                    continue;
+                }
+                for extra_filtered_row in [false, true] {
+                    let mut rows = BTreeMap::new();
+                    if let Some(value) = old.filter(|v| *v >= 0) {
+                        rows.insert(1_u64, Arc::new(value * 2));
+                    }
+                    let mut current = State::new(rows.clone());
+                    let change = Change::between(1, old.map(Arc::new), new.map(Arc::new)).unwrap();
+                    let mut input = vec![change];
+                    if extra_filtered_row {
+                        input.push(Change::Update {
+                            id: 9,
+                            before: Arc::new(-1),
+                            after: Arc::new(-2),
+                        });
+                    }
+                    let calls = Rc::new(Cell::new(0));
+                    let counter = calls.clone();
+                    let linear = Linear {
+                        parent: 7,
+                        transform: Rc::new(move |v: &Arc<i64>| {
+                            counter.set(counter.get() + 1);
+                            (**v >= 0).then(|| Arc::new(**v * 2))
+                        }),
+                        marker: std::marker::PhantomData::<fn() -> u64>,
+                    };
+                    let mut stages = Stages::new();
+                    let input: Pending<u64, i64> = input.into();
+                    stages.insert(7, Box::new(input));
+                    let mut meter = Meter::new(ExecutionBudget::default());
+                    let pending = linear.prepare(&current, &stages, &mut meter)?;
+                    assert_eq!(current.rows, rows, "preparation must not publish");
+                    assert_eq!(
+                        calls.get(),
+                        usize::from(new.is_some()) + usize::from(extra_filtered_row)
+                    );
+                    assert_eq!(meter.stats.work, 1 + usize::from(extra_filtered_row));
+                    let changed = old.is_some_and(|v| v >= 0) || new.is_some_and(|v| v >= 0);
+                    assert_eq!(meter.stats.output_changes, usize::from(changed));
+                    assert_eq!(pending.is_some(), changed);
+                    let expected = new
+                        .filter(|v| *v >= 0)
+                        .map(|v| BTreeMap::from([(1, Arc::new(v * 2))]))
+                        .unwrap_or_default();
+                    if let Some(pending) = pending {
+                        assert_eq!(pending.len(), 1);
+                        assert_eq!(*pending[0].id(), 1);
+                        current.apply(pending, Epoch(1));
+                    }
+                    assert_eq!(current.rows, expected);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn single_map_budget_failure_releases_derived_payload_without_publication() {
+        for output_limit in [0, 1] {
+            let weak = Rc::new(RefCell::new(None));
+            let captured = weak.clone();
+            let linear = Linear {
+                parent: 7,
+                transform: Rc::new(move |v: &Arc<i64>| {
+                    let value = Arc::new(**v * 2);
+                    *captured.borrow_mut() = Some(Arc::downgrade(&value));
+                    Some(value)
+                }),
+                marker: std::marker::PhantomData::<fn() -> u64>,
+            };
+            let current = State::<u64, i64>::new(BTreeMap::new());
+            let input: Pending<u64, i64> = Arc::from([Change::Insert {
+                id: 1,
+                value: Arc::new(3),
+            }]);
+            let mut stages = Stages::new();
+            stages.insert(7, Box::new(input));
+            let mut meter = Meter::new(ExecutionBudget {
+                max_output_changes: output_limit,
+                ..Default::default()
+            });
+            let result = linear.prepare(&current, &stages, &mut meter);
+            if output_limit == 0 {
+                assert!(matches!(result, Err(Error::BudgetExceeded(_))));
+            } else {
+                assert!(result.as_ref().unwrap().is_some());
+            }
+            drop(result);
+            assert!(weak.borrow().as_ref().unwrap().upgrade().is_none());
+            assert!(current.rows.is_empty());
+        }
     }
 }

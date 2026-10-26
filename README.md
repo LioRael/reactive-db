@@ -151,3 +151,6 @@ short-path noise from large-fanout improvements using A/A controls and paired ru
 
 The [rebuilt-instance study](docs/rebuilt-performance.md) validates the single-entry
 source fast path across fresh instances, creation orders, roles and processes.
+
+The [wide graph allocation study](docs/wide-performance.md) measures single-output
+filter/map preparation across heap perturbations and reversed version roles.

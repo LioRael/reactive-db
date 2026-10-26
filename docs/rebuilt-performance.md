@@ -1,3 +1,5 @@
+> 历史报告：后续宽图分配优化与布局交叉验证见 [新报告](wide-performance.md)。
+
 # reactive-db：短路径的多实例、交叉顺序与跨进程验证
 
 直接基线 `349ca50`。只修改 reactive-db 和任务验证目录；未改 livequery、tanstack-db-rs。纯安全 Rust、零运行时依赖，公共 API 不变。

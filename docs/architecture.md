@@ -207,3 +207,11 @@ constructs the shared slice directly. Work/output charging precedes publication;
 no-op entries remain empty, while equal-valued new Arcs remain replacements.
 Empty and multi-entry patches keep the existing vector path. This changes neither
 operator scheduling nor the atomic prepare/commit boundary.
+
+## Single-output linear publication
+
+Filter/map keeps its existing input loop and charging order. When exactly one
+input produces a change, a private non-inlined helper constructs the shared
+slice directly instead of filling a temporary Vec. Rejected filters, empty
+inputs and multi-entry inputs retain the loop path. The helper limits added
+construction code in the preparation method; no persistent buffer is introduced.
