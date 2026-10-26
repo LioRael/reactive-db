@@ -42,6 +42,7 @@ pub(super) trait Mode<LI, RI, L, R>: 'static {
     const OUTER: bool;
     fn id(left: &LI, right: Option<&RI>) -> Option<Self::Id>;
     fn value(left: Arc<L>, right: Option<Arc<R>>) -> Self::Value;
+    fn right(value: &Self::Value) -> Option<&Arc<R>>;
     fn unchanged(value: &Self::Value, left: &Arc<L>, right: Option<&Arc<R>>) -> bool;
 }
 pub(super) struct Inner;
@@ -61,6 +62,9 @@ impl<LI: Ord + Clone + 'static, RI: Ord + Clone + 'static, L: 'static, R: 'stati
             right: right.expect("inner output is created only for matched pairs"),
         }
     }
+    fn right(value: &Self::Value) -> Option<&Arc<R>> {
+        Some(&value.right)
+    }
     fn unchanged(value: &Self::Value, left: &Arc<L>, right: Option<&Arc<R>>) -> bool {
         Arc::ptr_eq(&value.left, left) && right.is_some_and(|r| Arc::ptr_eq(&value.right, r))
     }
@@ -76,6 +80,9 @@ impl<LI: Ord + Clone + 'static, RI: Ord + Clone + 'static, L: 'static, R: 'stati
     }
     fn value(left: Arc<L>, right: Option<Arc<R>>) -> Self::Value {
         LeftJoined { left, right }
+    }
+    fn right(value: &Self::Value) -> Option<&Arc<R>> {
+        value.right.as_ref()
     }
     fn unchanged(value: &Self::Value, left: &Arc<L>, right: Option<&Arc<R>>) -> bool {
         Arc::ptr_eq(&value.left, left)

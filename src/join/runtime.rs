@@ -126,6 +126,17 @@ impl<
         }
         let left_patch = self.left.stage(left_changes, meter)?;
         let right_patch = self.right.stage(right_changes, meter)?;
+        // A payload-only single-left update preserves every existing match.
+        let stable_left = match &left_patch {
+            Patch::One {
+                old_key: Some(old),
+                entry: Some(entry),
+                ..
+            } if M::OUTER && right_changes.is_none_or(|c| c.is_empty()) && old == &entry.key => {
+                Some(&entry.value)
+            }
+            _ => None,
+        };
         let left = self.left.overlay(&left_patch);
         let right = self.right.overlay(&right_patch);
         let mut candidates = Candidates::Empty;
@@ -136,9 +147,15 @@ impl<
                 for ri in self.right.members(&old.key) {
                     meter.work()?;
                     candidates.push((li, Some(ri)));
+                    if stable_left.is_some() {
+                        // Preserve the logical old/new bucket visit budget.
+                        meter.work()?;
+                    }
                 }
             }
-            if let Some(new) = left.get(li) {
+            if stable_left.is_none()
+                && let Some(new) = left.get(li)
+            {
                 right.visit_members(&new.key, &mut right_buckets, meter, |ri| {
                     candidates.push((li, Some(ri)));
                 })?;
@@ -179,13 +196,17 @@ impl<
                 continue;
             };
             let before = self.state.rows.get(&id).cloned();
-            let desired = left.get(li).and_then(|l| match ri {
-                Some(ri) => right
-                    .get(ri)
-                    .filter(|r| l.key == r.key)
-                    .map(|r| (&l.value, Some(&r.value))),
-                None => (!right.has_members(&l.key)).then_some((&l.value, None)),
-            });
+            let desired = if let (Some(l), Some(existing)) = (stable_left, &before) {
+                Some((l, M::right(existing)))
+            } else {
+                left.get(li).and_then(|l| match ri {
+                    Some(ri) => right
+                        .get(ri)
+                        .filter(|r| l.key == r.key)
+                        .map(|r| (&l.value, Some(&r.value))),
+                    None => (!right.has_members(&l.key)).then_some((&l.value, None)),
+                })
+            };
             let after = desired.map(|(l, r)| {
                 if let Some(existing) = &before
                     && M::unchanged(existing, l, r)
