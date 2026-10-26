@@ -1,0 +1,35 @@
+.github/workflows/ci.yml
+  s_ee0a00b403076b::t_97aef6699a31c4 1-41
+CHANGELOG.md
+  s_ee0a00b403076b::t_54558b022e067f 1-17
+Cargo.toml
+  s_ee0a00b403076b::t_5458d397292331 8-13
+README.md
+  s_ee0a00b403076b::t_407fbf119e8b5c 3,13-23,91,168-170
+docs/fanout-performance.md
+  s_ee0a00b403076b::t_d8ab3e95edbec5 119
+docs/rebuilt-performance.md
+  s_ee0a00b403076b::t_15d6dd9795a3d4 128
+docs/scheduler-performance.md
+  s_ee0a00b403076b::t_beb1da26848230 6
+docs/status.md
+  s_ee0a00b403076b::t_df29b3d8f96523 3,24
+docs/wide-performance.md
+  s_ee0a00b403076b::t_ff5c42f14b8ae7 127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8140219401339f554b2d933e396655834eaf7bff",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
