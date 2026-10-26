@@ -1,0 +1,31 @@
+README.md
+  s_ee0a00b403076b::t_b773d286537ce7 151-153
+benchmarks/rebuilt.rs
+  s_ee0a00b403076b::t_ebe85fe54131d5 1-195
+docs/architecture.md
+  s_ee0a00b403076b::t_824bdd628a6d1f 202-209
+docs/fanout-performance.md
+  s_ee0a00b403076b::t_a7a24dbca5f795 1-2
+docs/rebuilt-performance.md
+  s_ee0a00b403076b::t_6f9510baa558e3 1-140
+docs/status.md
+  s_ee0a00b403076b::t_0bb50f9d3dd0ff 24,108-111
+src/engine.rs
+  s_ee0a00b403076b::t_eee298b5188786 100-114,306-406
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31964e33ac0bd962e27430fa48a3447a5214827c",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
