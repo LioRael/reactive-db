@@ -1,0 +1,31 @@
+README.md
+  s_ee0a00b403076b::t_c32af9216cc44e 142-144
+docs/architecture.md
+  s_ee0a00b403076b::t_f791474c752a70 94-97
+docs/layered-scheduler-performance.md
+  s_ee0a00b403076b::t_c3d46cec3180b8 1-98
+docs/scheduler-path-performance.md
+  s_ee0a00b403076b::t_2dbe32a02cb2d9 1-2
+docs/semantics.md
+  s_ee0a00b403076b::t_4e8acb34a444a9 151-152
+docs/status.md
+  s_ee0a00b403076b::t_c170e9158974e2 24,96-99
+src/scheduler.rs
+  s_ee0a00b403076b::t_ef468f97857bae 13,48-52,60-65,67-80,184-227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39804b1031392298a092b05db50ea5047f27bdd4",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
