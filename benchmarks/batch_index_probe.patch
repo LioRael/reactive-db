@@ -1,0 +1,162 @@
+--- a/src/write_batch.rs
++++ b/src/write_batch.rs
+@@ -13,7 +13,7 @@
+ /// failed operation are dropped; retain application input separately if retrying.
+ pub struct WriteBatch<'db> {
+     db: &'db Database,
+-    pub(crate) patches: BTreeMap<NodeId, Box<dyn Any>>,
++    pub(crate) patches: SourcePatches,
+     pub(crate) meter: Meter,
+     pub(crate) invalid: Cell<bool>,
+ }
+@@ -29,7 +29,7 @@
+     pub(crate) fn new(db: &'db Database) -> Self {
+         Self {
+             db,
+-            patches: BTreeMap::new(),
++            patches: SourcePatches::new(),
+             meter: Meter::new(db.budget),
+             invalid: Cell::new(false),
+         }
+@@ -126,11 +126,130 @@
+             return self.invalidate(Err(error));
+         }
+         self.patches
+-            .entry(collection.query.id())
+-            .or_insert_with(|| Box::new(BTreeMap::<K, Option<Arc<T>>>::new()))
++            .get_or_insert_with(collection.query.id(), || {
++                Box::new(BTreeMap::<K, Option<Arc<T>>>::new())
++            })
+             .downcast_mut::<Patch<K, T>>()
+             .expect("source patch has its handle's type")
+             .insert(key, value);
+         Ok(())
+     }
+ }
++
++// Keep the minimum source inline so consumption preserves source registration order.
++#[derive(Default)]
++pub(crate) struct InlinePatches {
++    first: Option<(NodeId, Box<dyn Any>)>,
++    rest: BTreeMap<NodeId, Box<dyn Any>>,
++}
++impl InlinePatches {
++    fn len(&self) -> usize {
++        usize::from(self.first.is_some()) + self.rest.len()
++    }
++    fn get(&self, id: &NodeId) -> Option<&Box<dyn Any>> {
++        if let Some((first_id, value)) = &self.first
++            && first_id == id
++        {
++            return Some(value);
++        }
++        self.rest.get(id)
++    }
++    fn get_or_insert_with(
++        &mut self,
++        id: NodeId,
++        make: impl FnOnce() -> Box<dyn Any>,
++    ) -> &mut Box<dyn Any> {
++        if self
++            .first
++            .as_ref()
++            .is_some_and(|(first_id, _)| id > *first_id)
++        {
++            return self.rest.entry(id).or_insert_with(make);
++        }
++        if self
++            .first
++            .as_ref()
++            .is_none_or(|(first_id, _)| id != *first_id)
++        {
++            let value = make();
++            if let Some((old_id, old_value)) = self.first.replace((id, value)) {
++                self.rest.insert(old_id, old_value);
++            }
++        }
++        &mut self.first.as_mut().expect("source patch was inserted").1
++    }
++}
++impl IntoIterator for InlinePatches {
++    type Item = (NodeId, Box<dyn Any>);
++    type IntoIter = std::iter::Chain<
++        std::option::IntoIter<Self::Item>,
++        std::collections::btree_map::IntoIter<NodeId, Box<dyn Any>>,
++    >;
++    fn into_iter(self) -> Self::IntoIter {
++        self.first.into_iter().chain(self.rest)
++    }
++}
++
++thread_local! { static INLINE: Cell<bool> = const { Cell::new(false) }; }
++/// Select the source patch representation for subsequent diagnostic writes.
++pub fn probe_inline_patches(enabled: bool) {
++    INLINE.set(enabled);
++}
++pub(crate) enum SourcePatches {
++    Tree(BTreeMap<NodeId, Box<dyn Any>>),
++    Inline(InlinePatches),
++}
++impl SourcePatches {
++    fn new() -> Self {
++        if INLINE.get() {
++            Self::Inline(InlinePatches::default())
++        } else {
++            Self::Tree(BTreeMap::new())
++        }
++    }
++    fn len(&self) -> usize {
++        match self {
++            Self::Tree(v) => v.len(),
++            Self::Inline(v) => v.len(),
++        }
++    }
++    fn get(&self, id: &NodeId) -> Option<&Box<dyn Any>> {
++        match self {
++            Self::Tree(v) => v.get(id),
++            Self::Inline(v) => v.get(id),
++        }
++    }
++    fn get_or_insert_with(
++        &mut self,
++        id: NodeId,
++        make: impl FnOnce() -> Box<dyn Any>,
++    ) -> &mut Box<dyn Any> {
++        match self {
++            Self::Tree(v) => v.entry(id).or_insert_with(make),
++            Self::Inline(v) => v.get_or_insert_with(id, make),
++        }
++    }
++}
++pub(crate) enum PatchIter {
++    Tree(std::collections::btree_map::IntoIter<NodeId, Box<dyn Any>>),
++    Inline(<InlinePatches as IntoIterator>::IntoIter),
++}
++impl Iterator for PatchIter {
++    type Item = (NodeId, Box<dyn Any>);
++    fn next(&mut self) -> Option<Self::Item> {
++        match self {
++            Self::Tree(v) => v.next(),
++            Self::Inline(v) => v.next(),
++        }
++    }
++}
++impl IntoIterator for SourcePatches {
++    type Item = (NodeId, Box<dyn Any>);
++    type IntoIter = PatchIter;
++    fn into_iter(self) -> PatchIter {
++        match self {
++            Self::Tree(v) => PatchIter::Tree(v.into_iter()),
++            Self::Inline(v) => PatchIter::Inline(v.into_iter()),
++        }
++    }
++}
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -138,3 +138,6 @@
+ pub use subscription::Subscription;
+ pub use view::{LiveQuery, SubscriptionStart};
+ pub use write_batch::WriteBatch;
++
++#[doc(hidden)]
++pub use write_batch::probe_inline_patches;
