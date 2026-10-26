@@ -1,0 +1,31 @@
+README.md
+  s_ee0a00b403076b::t_fe3c307e2be567 154-156
+benchmarks/wide.rs
+  s_ee0a00b403076b::t_37d94737299e69 1-220
+docs/architecture.md
+  s_ee0a00b403076b::t_e50491eab134db 210-217
+docs/rebuilt-performance.md
+  s_ee0a00b403076b::t_c4be56a54ad3f8 1-2
+docs/status.md
+  s_ee0a00b403076b::t_2e5b3c715fa4a5 24,112-115
+docs/wide-performance.md
+  s_ee0a00b403076b::t_82c9fa360c5dcc 1-141
+src/engine.rs
+  s_ee0a00b403076b::t_26d17941c82f3a 15-21,270-272,417-521
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e8ee6bf50e94a8fcc6cf8da45b67882bb6e93668",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
