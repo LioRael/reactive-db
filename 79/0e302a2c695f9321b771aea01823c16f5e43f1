@@ -1,0 +1,23 @@
+benchmarks/fluctuation.rs
+  s_ee0a00b403076b::t_e80f4a3131d102 1-218
+docs/fluctuation-performance.md
+  s_ee0a00b403076b::t_48550f420eca78 1-139
+tests/source_order.rs
+  s_ee0a00b403076b::t_a802692937a68c 1-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "790e302a2c695f9321b771aea01823c16f5e43f1",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
