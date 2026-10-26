@@ -1,6 +1,6 @@
 # reactive-db
 
-Experimental native Rust reactive collections. M0–M3 are implemented: typed
+Experimental native Rust reactive collections. This is an alpha release; APIs may change. M0–M3 are implemented: typed
 collections, atomic in-memory write batches, incremental filter/map, inner/left joins, grouped count/stats, distinct values,
 sort/top-k, ordered deltas and bounded subscriptions. Execution budgets reject
 excessive batches before publication. Writes propagate only through affected query
@@ -9,6 +9,17 @@ dependencies, with empty deltas stopping downstream work. The planned relational
 Zero runtime dependencies. Safe Rust. No JS, FFI, serde requirement, background thread,
 async runtime or connection to either original project. Rust 1.88+; development
 checks use the pinned 1.99.0 toolchain.
+
+## Installation
+
+```toml
+[dependencies]
+reactive-db = "0.1.0-alpha.1"
+```
+
+[API documentation](https://docs.rs/reactive-db) · [GitHub](https://github.com/LioRael/reactive-db)
+
+## Quick start
 
 ```rust
 use reactive_db::{Database, Poll};
@@ -77,7 +88,7 @@ deltas; work-count tests check single-row updates at different collection sizes.
 Rustdoc includes compile-fail contracts. No external services or oracle runtime
 are required. Criterion is a development-only benchmark dependency.
 
-Optimistic writes, persistence and UI adapters remain future milestones. Nothing has been published.
+Optimistic writes, persistence and UI adapters remain future milestones.
 
 ## Typed joins
 
@@ -154,3 +165,6 @@ source fast path across fresh instances, creation orders, roles and processes.
 
 The [wide graph allocation study](docs/wide-performance.md) measures single-output
 filter/map preparation across heap perturbations and reversed version roles.
+
+Stable-key, single-left-row left joins reuse committed matches; see
+[join lookup optimization](docs/join-match-reuse.md) for measurements and limits.

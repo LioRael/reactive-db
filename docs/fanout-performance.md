@@ -116,7 +116,7 @@ version = "0.1.0"
 edition = "2024"
 [dependencies]
 old_db = { package = "reactive-db-baseline", path = "before" }
-new_db = { package = "reactive-db", path = "/Users/leosouthey/Projects/reactive-db" }
+new_db = { package = "reactive-db", path = "/path/to/reactive-db" }
 ```
 
 `cargo build --release --offline` 后直接运行可执行文件并保存 CSV。控制与候选均由宏生成相同工作负载：同批次写入、视图保持存活、不在计时循环里读快照。同进程 harness 也通过单独 clippy -D warnings。

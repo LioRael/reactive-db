@@ -3,7 +3,7 @@
 # reactive-db 受影响节点调度：实现、回归与性能报告
 
 日期：2026-10-26。对比基线：`dca6164d355654d7e851abc972b221d984dcf9a2`。
-仅修改 `/Users/leosouthey/Projects/reactive-db`；两个原仓库未执行写操作。保持纯 Rust、禁止 unsafe、零运行时依赖，未增加 JS/FFI/异步运行时。
+仅修改 `/path/to/reactive-db`；两个原仓库未执行写操作。保持纯 Rust、禁止 unsafe、零运行时依赖，未增加 JS/FFI/异步运行时。
 
 ## 实现结论
 

@@ -1,6 +1,6 @@
 # M0–M3 delivery status
 
-Date: 2026-10-26. Local implementation only; not published.
+Date: 2026-10-27. Delivery target: 0.1.0-alpha.1. See the GitHub release and crates.io for publication status.
 
 ## Delivered
 
@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-105 tests pass: 92 unit/integration and 13 rustdoc tests, including 10 compile-fail
+111 tests pass: 98 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.

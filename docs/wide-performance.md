@@ -124,7 +124,7 @@ version = "0.1.0"
 edition = "2024"
 [dependencies]
 old_db = { package = "reactive-db-baseline", path = "before" }
-new_db = { package = "reactive-db", path = "/Users/leosouthey/Projects/reactive-db" }
+new_db = { package = "reactive-db", path = "/path/to/reactive-db" }
 ```
 
 先 release 构建，再分别设置 `BENCH_RUN=0`、`1`、`2` 串行启动，保存各自 CSV。交换两个依赖别名后设置 `ROLE_REVERSED=1`；主 harness 默认只跑宽图，交付的反向 harness 还复测全部守护场景。原始反向 CSV 中 before 是候选，实例汇总 CSV/JSON 已归一化。`PROFILE_BASELINE=1` 运行基线宽图 8 秒并输出 ready 标记；在预构建的进程上单独执行 sample，不与正式计时并行。

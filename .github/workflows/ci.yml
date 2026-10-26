@@ -1,0 +1,41 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            toolchain: stable
+          - os: ubuntu-latest
+            toolchain: 1.88.0
+          - os: macos-latest
+            toolchain: stable
+          - os: windows-latest
+            toolchain: stable
+    runs-on: ${{ matrix.os }}
+    env:
+      TOOLCHAIN: ${{ matrix.toolchain }}
+      RUSTC_WRAPPER: ""
+      RUSTC_WORKSPACE_WRAPPER: ""
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: rustup toolchain install "$TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+      - run: cargo +"$TOOLCHAIN" check --all-targets --all-features --locked
+      - run: cargo +"$TOOLCHAIN" test --locked
+      - if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+        run: cargo +"$TOOLCHAIN" clippy --all-targets --all-features --locked -- -D warnings
+      - if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+        run: cargo +"$TOOLCHAIN" doc --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - if: matrix.toolchain == 'stable' && matrix.os == 'ubuntu-latest'
+        run: cargo +"$TOOLCHAIN" package --locked

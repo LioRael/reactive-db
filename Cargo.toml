@@ -5,7 +5,12 @@ edition = "2024"
 rust-version = "1.88"
 description = "Typed, synchronous incremental collections and delta subscriptions"
 license = "MIT"
-publish = false
+repository = "https://github.com/LioRael/reactive-db"
+documentation = "https://docs.rs/reactive-db"
+readme = "README.md"
+keywords = ["reactive", "database", "incremental", "query", "collections"]
+categories = ["data-structures", "database-implementations"]
+include = ["/src/**", "/examples/**", "/tests/**", "/benches/*.rs", "/docs/**", "/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE", "/THIRD_PARTY.md", "/CHANGELOG.md"]
 
 [lints.rust]
 unsafe_code = "forbid"

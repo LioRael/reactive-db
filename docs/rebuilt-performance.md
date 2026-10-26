@@ -125,7 +125,7 @@ version = "0.1.0"
 edition = "2024"
 [dependencies]
 old_db = { package = "reactive-db-baseline", path = "before" }
-new_db = { package = "reactive-db", path = "/Users/leosouthey/Projects/reactive-db" }
+new_db = { package = "reactive-db", path = "/path/to/reactive-db" }
 ```
 
 先 `cargo build --release --offline`，再分别以 `BENCH_RUN=0`、`1`、`2` 启动可执行文件，分别保存 CSV；不要同时运行这些进程。`BENCH_RUN` 只控制场景、创建、校准、计时顺序，不改变数据库数据。`BENCH_CONTROL=1` 选择前置对照的两个短路径及 4 对实例；重现前置同源控制还需将两边都指向基线源码，当时目标窗口为 50 ms，正式 harness 为 100 ms。
