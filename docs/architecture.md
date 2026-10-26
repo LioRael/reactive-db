@@ -91,8 +91,10 @@ notifications. Weak runtime tokens keep allocation identities reserved until rem
 `scheduler.rs` assigns monotonic topological ranks during parent-first registration
 and stores reverse dependency edges. Capacity is checked before graph publication.
 Changed sources seed a queue merging borrowed, already sorted child sequences.
-The smallest sequence stays inline; additional sequences live in a heap. Each
-entry is one nonempty sequence, not one edge. Advancing the smallest sequence
+The smallest sequence stays inline; additional multi-element sequences live in
+a heap. Sequences with one remaining target when enqueued use a separate compact heap
+of (rank, NodeId) pairs, avoiding tree iterator moves across wide singleton layers. Pop compares the
+compact head with the current sequence head before advancing either. Advancing the smallest sequence
 preserves rank order; equal ranks from converging inputs are skipped together. New
 sequences always point beyond the executing parent rank, so a node cannot be
 rescheduled after its turn. Entire sequence edge counts are charged before admission;

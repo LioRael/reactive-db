@@ -10,6 +10,7 @@ type Children = BTreeSet<(u64, NodeId)>;
 pub(crate) struct Queue<'a> {
     first: Option<Run<'a>>,
     runs: BinaryHeap<Reverse<Run<'a>>>,
+    singles: BinaryHeap<Reverse<(u64, NodeId)>>,
     last: Option<u64>,
 }
 struct Run<'a> {
@@ -44,7 +45,11 @@ impl<'a> Queue<'a> {
                 if incoming.next < first.next {
                     std::mem::swap(first, &mut incoming);
                 }
-                self.runs.push(Reverse(incoming));
+                if incoming.rest.len() == 0 {
+                    self.singles.push(Reverse(incoming.next));
+                } else {
+                    self.runs.push(Reverse(incoming));
+                }
             } else {
                 self.first = Some(incoming);
             }
@@ -52,18 +57,27 @@ impl<'a> Queue<'a> {
     }
     pub fn pop_first(&mut self) -> Option<(u64, NodeId)> {
         loop {
-            let first = self.first.as_mut()?;
-            let next = first.next;
-            if let Some(&following) = first.rest.next() {
-                first.next = following;
-                if let Some(mut head) = self.runs.peek_mut()
-                    && head.0.next < first.next
-                {
-                    std::mem::swap(first, &mut head.0);
-                }
+            let next = if self.singles.peek().is_some_and(|single| {
+                self.first
+                    .as_ref()
+                    .is_none_or(|first| single.0 < first.next)
+            }) {
+                self.singles.pop().expect("a singleton head was present").0
             } else {
-                self.first = self.runs.pop().map(|run| run.0);
-            }
+                let first = self.first.as_mut()?;
+                let next = first.next;
+                if let Some(&following) = first.rest.next() {
+                    first.next = following;
+                    if let Some(mut head) = self.runs.peek_mut()
+                        && head.0.next < first.next
+                    {
+                        std::mem::swap(first, &mut head.0);
+                    }
+                } else {
+                    self.first = self.runs.pop().map(|run| run.0);
+                }
+                next
+            };
             // Every new edge points forward. Equal ranks from converging runs
             // arrive together, so no persistent visited set is needed.
             if self.last != Some(next.0) {
@@ -164,6 +178,50 @@ mod tests {
         assert_eq!(ready.pop_first(), Some((2, 2)));
         assert_eq!(ready.pop_first(), Some((3, 3)));
         assert_eq!(ready.pop_first(), Some((100, 100)));
+        assert!(ready.pop_first().is_none());
+    }
+
+    #[test]
+    fn singleton_frontier_keeps_only_compact_heads_and_merges_with_runs() {
+        let source = Children::from([(1, 1), (10, 10)]);
+        let a = Children::from([(20, 20)]);
+        let duplicate = Children::from([(10, 10)]);
+        let branch = Children::from([(3, 3), (11, 11)]);
+        let mut ready = Queue::new();
+        ready.push(&source);
+        assert_eq!(ready.pop_first(), Some((1, 1)));
+        ready.push(&a);
+        ready.push(&duplicate);
+        ready.push(&branch);
+        assert!(
+            ready.runs.is_empty(),
+            "exhausted tails need no tree iterator in the heap"
+        );
+        assert_eq!(ready.singles.len(), 3);
+        let mut actual = Vec::new();
+        while let Some(value) = ready.pop_first() {
+            actual.push(value);
+        }
+        assert_eq!(actual, vec![(3, 3), (10, 10), (11, 11), (20, 20)]);
+    }
+
+    #[test]
+    fn a_wide_singleton_layer_never_allocates_a_heap_of_tree_iterators() {
+        let roots: Children = (1..=1000).map(|rank| (rank, rank as usize)).collect();
+        let leaves: Vec<Children> = (1001..=2000)
+            .map(|rank| Children::from([(rank, rank as usize)]))
+            .collect();
+        let mut ready = Queue::new();
+        ready.push(&roots);
+        for rank in 1..=1000 {
+            assert_eq!(ready.pop_first(), Some((rank, rank as usize)));
+            ready.push(&leaves[rank as usize - 1]);
+        }
+        assert_eq!(ready.runs.capacity(), 0);
+        assert_eq!(ready.singles.len(), 999);
+        for rank in 1001..=2000 {
+            assert_eq!(ready.pop_first(), Some((rank, rank as usize)));
+        }
         assert!(ready.pop_first().is_none());
     }
 

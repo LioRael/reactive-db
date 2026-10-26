@@ -1,3 +1,5 @@
+> 历史报告：后续针对多层宽图压缩了单后继待处理项；见 [多层宽图调查](layered-scheduler-performance.md)。
+
 # reactive-db 调度热路径优化与性能验证
 
 日期：2026-10-26。直接基线 `c401f1b`；全图扫描参考 `dca6164`。只修改 reactive-db 和任务验证目录，未改动 livequery、tanstack-db-rs。保持安全纯 Rust、零运行时依赖、现有公共 API。

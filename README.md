@@ -139,3 +139,6 @@ with the first affected-node scheduler and the original full-graph scheduler.
 
 The [scheduler hot-path follow-up](docs/scheduler-path-performance.md) measures
 inline queue/stage storage, including 10,000-wide layered and converging graphs.
+
+The [layered graph investigation](docs/layered-scheduler-performance.md) includes
+CPU sampling and separate measurements of queue compaction and node lookup.

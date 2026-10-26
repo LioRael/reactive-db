@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-88 tests pass: 75 unit/integration and 13 rustdoc tests, including 10 compile-fail
+90 tests pass: 77 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -93,3 +93,7 @@ for three-version benchmarks and retained sparse behavior.
 The hot-path follow-up adds inline single-run scheduling and inline-first stage
 lookup, preserving ordered source patches and independent commit order. See
 [hot-path measurements](scheduler-path-performance.md).
+
+Wide singleton frontiers now store compact rank/identity heads, reducing tree
+iterator movement in layered graphs. Runtime nodes retain their ordered map.
+See [layered graph investigation](layered-scheduler-performance.md).
