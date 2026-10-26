@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-90 tests pass: 77 unit/integration and 13 rustdoc tests, including 10 compile-fail
+95 tests pass: 82 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -97,3 +97,7 @@ lookup, preserving ordered source patches and independent commit order. See
 Wide singleton frontiers now store compact rank/identity heads, reducing tree
 iterator movement in layered graphs. Runtime nodes retain their ordered map.
 See [layered graph investigation](layered-scheduler-performance.md).
+
+Short-path and join follow-up: inline empty/single-target queue exits, ID-only
+dequeue results and single-row join index patches. See
+[short paths and join convergence](join-path-performance.md).

@@ -142,3 +142,6 @@ inline queue/stage storage, including 10,000-wide layered and converging graphs.
 
 The [layered graph investigation](docs/layered-scheduler-performance.md) includes
 CPU sampling and separate measurements of queue compaction and node lookup.
+
+See [short paths and join convergence](docs/join-path-performance.md) for the
+ID-only dequeue interface, single-row join patches and before/after measurements.

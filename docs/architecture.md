@@ -173,3 +173,15 @@ Failed writes discard every source/operator patch, retain journals/epoch and can
 be retried. Raising a budget does not execute or replay a previously failed batch.
 Existing materialized view reuse does not reconstruct or charge output rows.
 Panic poisoning remains separate from normal budget/arithmetic rejection.
+
+## Short paths and single-row join patches
+
+Queue rank stays private to the queue; execution receives only NodeId. Empty and
+single-target queues use a small inline wrapper, while merging stays out of line.
+The compact singleton frontier used by layered graphs is unchanged.
+
+Each join side stages exactly one changed identity inline as its ID, cached old
+key and optional new entry. Empty/multi-row input retains the original batch maps.
+Overlay membership, pair enumeration, work charging and prepare/commit separation
+are shared. Single-row commit removes old membership before adding the new one,
+including same-key replacements; no old key/payload is retained as a cache shortcut.

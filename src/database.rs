@@ -228,7 +228,7 @@ impl Database {
             meter.work()?;
             self.scheduler.propagate(id, &mut ready, &mut meter)?;
         }
-        while let Some((_, id)) = ready.pop_first() {
+        while let Some(id) = ready.pop_first() {
             meter.work()?;
             let node = self
                 .nodes

@@ -130,7 +130,7 @@ impl<
         let mut candidates = BTreeSet::new();
         let mut left_buckets = BTreeMap::new();
         let mut right_buckets = BTreeMap::new();
-        for li in left_patch.rows.keys() {
+        for li in left_patch.ids() {
             if let Some(old) = self.left.rows.get(li) {
                 for ri in self.right.members(&old.key) {
                     meter.work()?;
@@ -146,7 +146,7 @@ impl<
                 candidates.insert((li.clone(), None));
             }
         }
-        for ri in right_patch.rows.keys() {
+        for ri in right_patch.ids() {
             let old_left = self
                 .right
                 .rows

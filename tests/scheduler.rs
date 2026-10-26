@@ -346,3 +346,58 @@ fn failed_dense_stages_release_payloads_before_retry_and_after_retirement() -> R
     );
     Ok(())
 }
+
+#[test]
+fn converging_join_budget_rejection_preserves_all_subscription_epochs() -> Result<(), Error> {
+    let mut db = Database::new();
+    let source = db.create_collection::<u64, i64>("source")?;
+    db.write(|tx| tx.insert(&source, 0, 0))?;
+    let left = source.query().map(|v| *v);
+    let right = source.query().map(|v| *v).map(|v| *v);
+    let views = (0..32)
+        .map(|_| {
+            db.materialize(
+                left.clone()
+                    .join_on(right.clone(), |_, _| (), |_, _| ())
+                    .map(|v| *v.left + *v.right),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut subscriptions = views
+        .iter()
+        .map(|v| v.subscribe(&mut db).map(|(_, sub)| sub))
+        .collect::<Result<Vec<_>, _>>()?;
+    let measured = db.write(|tx| tx.replace(&source, 0, 1))?;
+    for sub in &mut subscriptions {
+        assert!(matches!(sub.poll(&db)?, Poll::Delta(_)));
+    }
+    db.set_execution_budget(ExecutionBudget {
+        max_work: measured.stats.work - 1,
+        ..Default::default()
+    })?;
+    assert!(matches!(
+        db.write(|tx| tx.replace(&source, 0, 2)),
+        Err(Error::BudgetExceeded("work"))
+    ));
+    assert_eq!(db.epoch()?, measured.epoch);
+    assert_eq!(*source.get(&db, &0)?.unwrap(), 1);
+    for (view, sub) in views.iter().zip(&mut subscriptions) {
+        assert_eq!(*view.snapshot(&db)?.rows[0].value, 2);
+        assert!(matches!(sub.poll(&db)?, Poll::Idle));
+    }
+    db.set_execution_budget(ExecutionBudget {
+        max_work: measured.stats.work,
+        ..Default::default()
+    })?;
+    let committed = db.write(|tx| tx.replace(&source, 0, 2))?;
+    assert_eq!(committed.stats, measured.stats);
+    for (view, sub) in views.iter().zip(&mut subscriptions) {
+        assert_eq!(*view.snapshot(&db)?.rows[0].value, 4);
+        let Poll::Delta(delta) = sub.poll(&db)? else {
+            panic!("missing committed join delta")
+        };
+        assert_eq!(delta.to_epoch, committed.epoch);
+        assert_eq!(delta.changes.len(), 1);
+    }
+    Ok(())
+}

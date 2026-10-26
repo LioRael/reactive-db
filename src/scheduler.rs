@@ -55,7 +55,24 @@ impl<'a> Queue<'a> {
             }
         }
     }
-    pub fn pop_first(&mut self) -> Option<(u64, NodeId)> {
+    #[inline]
+    pub fn pop_first(&mut self) -> Option<NodeId> {
+        if let Some(first) = &self.first {
+            if first.rest.len() == 0 && self.runs.is_empty() && self.singles.is_empty() {
+                let (rank, id) = first.next;
+                self.first = None;
+                if self.last == Some(rank) {
+                    return None;
+                }
+                self.last = Some(rank);
+                return Some(id);
+            }
+        } else if self.singles.is_empty() {
+            return None;
+        }
+        self.pop_merged()
+    }
+    fn pop_merged(&mut self) -> Option<NodeId> {
         loop {
             let next = if self.singles.peek().is_some_and(|single| {
                 self.first
@@ -82,7 +99,7 @@ impl<'a> Queue<'a> {
             // arrive together, so no persistent visited set is needed.
             if self.last != Some(next.0) {
                 self.last = Some(next.0);
-                return Some(next);
+                return Some(next.1);
             }
         }
     }
@@ -166,18 +183,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn node_ids_are_returned_without_truncation_or_rank_confusion() {
+        let source = Children::from([(u64::MAX - 2, usize::MAX), (u64::MAX - 1, 0), (u64::MAX, 7)]);
+        let duplicate = Children::from([(u64::MAX - 1, 0), (u64::MAX, 7)]);
+        let mut ready = Queue::new();
+        ready.push(&source);
+        ready.push(&duplicate);
+        assert_eq!(ready.pop_first(), Some(usize::MAX));
+        assert_eq!(ready.pop_first(), Some(0));
+        assert_eq!(ready.pop_first(), Some(7));
+        assert_eq!(ready.pop_first(), None);
+    }
+
+    #[test]
+    fn converging_runs_can_exhaust_at_different_duplicate_heads() {
+        let a = Children::from([(1, 101), (2, 102)]);
+        let b = Children::from([(1, 101), (2, 102), (3, 103)]);
+        let c = Children::from([(1, 101), (3, 103)]);
+        let mut ready = Queue::new();
+        for children in [&a, &b, &c] {
+            ready.push(children);
+        }
+        for id in [101, 102, 103] {
+            assert_eq!(ready.pop_first(), Some(id));
+        }
+        assert_eq!(ready.pop_first(), None);
+        // A subsequent forward run must work after both the merged and fast
+        // single-item paths have consumed their tails.
+        let tail = Children::from([(4, 104)]);
+        ready.push(&tail);
+        assert_eq!(ready.pop_first(), Some(104));
+        assert_eq!(ready.pop_first(), None);
+    }
+
+    #[test]
     fn inline_run_stays_allocation_free_and_merges_new_earlier_children() {
         let source = Children::from([(1, 1), (100, 100)]);
         let branch = Children::from([(2, 2), (3, 3), (100, 100)]);
         let mut ready = Queue::new();
         ready.push(&source);
         assert_eq!(ready.runs.capacity(), 0);
-        assert_eq!(ready.pop_first(), Some((1, 1)));
+        assert_eq!(ready.pop_first(), Some(1));
         assert_eq!(ready.runs.capacity(), 0);
         ready.push(&branch);
-        assert_eq!(ready.pop_first(), Some((2, 2)));
-        assert_eq!(ready.pop_first(), Some((3, 3)));
-        assert_eq!(ready.pop_first(), Some((100, 100)));
+        assert_eq!(ready.pop_first(), Some(2));
+        assert_eq!(ready.pop_first(), Some(3));
+        assert_eq!(ready.pop_first(), Some(100));
         assert!(ready.pop_first().is_none());
     }
 
@@ -189,7 +240,7 @@ mod tests {
         let branch = Children::from([(3, 3), (11, 11)]);
         let mut ready = Queue::new();
         ready.push(&source);
-        assert_eq!(ready.pop_first(), Some((1, 1)));
+        assert_eq!(ready.pop_first(), Some(1));
         ready.push(&a);
         ready.push(&duplicate);
         ready.push(&branch);
@@ -202,7 +253,7 @@ mod tests {
         while let Some(value) = ready.pop_first() {
             actual.push(value);
         }
-        assert_eq!(actual, vec![(3, 3), (10, 10), (11, 11), (20, 20)]);
+        assert_eq!(actual, vec![3, 10, 11, 20]);
     }
 
     #[test]
@@ -214,13 +265,13 @@ mod tests {
         let mut ready = Queue::new();
         ready.push(&roots);
         for rank in 1..=1000 {
-            assert_eq!(ready.pop_first(), Some((rank, rank as usize)));
+            assert_eq!(ready.pop_first(), Some(rank as usize));
             ready.push(&leaves[rank as usize - 1]);
         }
         assert_eq!(ready.runs.capacity(), 0);
         assert_eq!(ready.singles.len(), 999);
         for rank in 1001..=2000 {
-            assert_eq!(ready.pop_first(), Some((rank, rank as usize)));
+            assert_eq!(ready.pop_first(), Some(rank as usize));
         }
         assert!(ready.pop_first().is_none());
     }
@@ -233,7 +284,7 @@ mod tests {
         ready.push(&children);
         assert_eq!(ready.runs.len(), 1, "queue storage follows runs, not edges");
         for rank in 1..=10_000 {
-            assert_eq!(ready.pop_first(), Some((rank, rank as usize)));
+            assert_eq!(ready.pop_first(), Some(rank as usize));
         }
         assert!(ready.pop_first().is_none());
     }
@@ -270,9 +321,10 @@ mod tests {
                     .unwrap();
             }
             let mut actual = Vec::new();
-            while let Some((rank, id)) = ready.pop_first() {
+            while let Some(id) = ready.pop_first() {
+                let rank = (1000 - id) as u64;
                 actual.push((rank, id));
-                if rank % 7 != 0 {
+                if !rank.is_multiple_of(7) {
                     scheduler.propagate(id, &mut ready, &mut meter).unwrap();
                 }
             }
@@ -304,7 +356,7 @@ mod tests {
         });
         scheduler.propagate(0, &mut ready, &mut meter).unwrap();
         assert_eq!(meter.stats.work, 100);
-        assert_eq!(ready.pop_first(), Some((1, 1)));
+        assert_eq!(ready.pop_first(), Some(1));
         drop(ready);
         scheduler.remove(100);
         let mut ready = Queue::new();
@@ -338,7 +390,7 @@ mod tests {
         let mut ready = Queue::new();
         let mut meter = Meter::new(crate::ExecutionBudget::default());
         scheduler.propagate(0, &mut ready, &mut meter).unwrap();
-        assert_eq!(ready.pop_first(), Some((10_001, 1)));
+        assert_eq!(ready.pop_first(), Some(1));
     }
 
     #[test]
