@@ -1,0 +1,23 @@
+benchmarks/batch_index_strict.rs
+  s_ee0a00b403076b::t_5d742cb95d639b 1-223
+docs/batch-index-counters.md
+  s_ee0a00b403076b::t_94fe45ae186a20 1-108
+tests/update_identity.rs
+  s_ee0a00b403076b::t_0f770d133e9458 1-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31371a85498690efd82930c5739bd7fe1c487d2f",
+  "prompts": {},
+  "sessions": {
+    "s_ee0a00b403076b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a17505-144a-7aa1-bb70-1f0b9a618180",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
