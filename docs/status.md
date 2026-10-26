@@ -21,7 +21,7 @@ safe Rust 2024 library (minimum Rust 1.88):
 
 ## Validation scope
 
-100 tests pass: 87 unit/integration and 13 rustdoc tests, including 10 compile-fail
+103 tests pass: 90 unit/integration and 13 rustdoc tests, including 10 compile-fail
 contracts. All M1/M2 regression tests remain enabled. Independent model coverage:
 
 - Filter/map: 12 seeds × 500 batches, full snapshots plus delta-only mirrors.
@@ -105,3 +105,7 @@ dequeue results and single-row join index patches. See
 Large-fanout follow-up: borrowed candidate pairs, inline single-pair storage,
 stable deduplication and inline first commit identity. See
 [paired performance validation](fanout-performance.md).
+
+Single-entry source patches construct their shared publication directly and move
+the owned identity. See [rebuilt-instance performance validation](rebuilt-performance.md)
+for creation-order crossover, role reversal, process repeats and residual limits.

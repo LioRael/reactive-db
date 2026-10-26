@@ -1,3 +1,5 @@
+> 历史报告：后续单行源发布与多实例交叉验证见 [新报告](rebuilt-performance.md)。
+
 # reactive-db 短路径与大 fanout：配对测量和优化
 
 日期：2026-10-26。直接基线 `c6c1fea`。本轮只修改 reactive-db 与任务验证目录，未改动 livequery、tanstack-db-rs。纯安全 Rust、零运行时依赖，公共 API 不变。

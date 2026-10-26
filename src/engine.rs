@@ -97,6 +97,21 @@ impl<K: Ord + Clone, T> State<K, T> {
         }
     }
     fn changes(&self, patch: Patch<K, T>, meter: &mut Meter) -> Result<Pending<K, T>, Error> {
+        let mut patch = patch.into_iter();
+        if patch.len() == 1 {
+            let (key, after) = patch.next().expect("single source patch has one entry");
+            meter.work()?;
+            let before = self.rows.get(&key).cloned();
+            return match Change::between(key, before, after) {
+                Some(change) => {
+                    meter.output()?;
+                    // Construct the shared publication directly, without a
+                    // temporary Vec or cloning the already-owned identity.
+                    Ok(Arc::from([change]))
+                }
+                None => Ok(Arc::from([])),
+            };
+        }
         let mut changes = Vec::new();
         for (key, after) in patch {
             meter.work()?;
@@ -286,5 +301,106 @@ mod token_tests {
         owner.alive.set(false);
         drop(token);
         assert!(owner.retired.borrow().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod source_patch_tests {
+    use super::*;
+    use crate::ExecutionBudget;
+
+    #[test]
+    fn single_and_multi_entry_source_patches_match_an_independent_row_model() -> Result<(), Error> {
+        let initial = BTreeMap::from([(1_u64, Arc::new(7_i64)), (2, Arc::new(9))]);
+        for (id, after, changed) in [
+            (1, None, true),
+            (1, Some(Arc::new(8)), true),
+            (1, Some(Arc::new(7)), true),
+            (3, Some(Arc::new(10)), true),
+            (3, None, false),
+            (1, initial.get(&1).cloned(), false),
+        ] {
+            for extra_noop in [false, true] {
+                let mut state = State::new(initial.clone());
+                let mut patch = BTreeMap::from([(id, after.clone())]);
+                if extra_noop {
+                    patch.insert(2, initial.get(&2).cloned());
+                }
+                let mut meter = Meter::new(ExecutionBudget::default());
+                let pending = state.changes(patch, &mut meter)?;
+                assert_eq!(meter.stats.work, 1 + usize::from(extra_noop));
+                assert_eq!(meter.stats.output_changes, usize::from(changed));
+                assert_eq!(pending.len(), usize::from(changed));
+                if let Some(change) = pending.first() {
+                    assert_eq!(*change.id(), id);
+                    let before = match change {
+                        Change::Insert { .. } => None,
+                        Change::Update { before, .. } => Some(before),
+                        Change::Remove { value, .. } => Some(value),
+                    };
+                    assert_eq!(before, initial.get(&id));
+                    assert_eq!(change.after(), after.as_ref());
+                }
+                assert_eq!(state.rows, initial, "preparation must not publish");
+                let mut expected = initial.clone();
+                if let Some(value) = &after {
+                    expected.insert(id, value.clone());
+                } else {
+                    expected.remove(&id);
+                }
+                state.apply(pending, Epoch(1));
+                assert_eq!(state.rows, expected);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn rejected_single_source_publication_releases_the_owned_payload() {
+        for limits in [
+            ExecutionBudget {
+                max_work: 0,
+                ..Default::default()
+            },
+            ExecutionBudget {
+                max_output_changes: 0,
+                ..Default::default()
+            },
+        ] {
+            let state = State::<u64, String>::new(BTreeMap::new());
+            let value = Arc::new("staged payload".to_owned());
+            let weak = Arc::downgrade(&value);
+            let mut meter = Meter::new(limits);
+            assert!(matches!(
+                state.changes(BTreeMap::from([(1, Some(value))]), &mut meter),
+                Err(Error::BudgetExceeded(_))
+            ));
+            assert!(weak.upgrade().is_none());
+            assert!(state.rows.is_empty());
+        }
+    }
+
+    #[test]
+    fn single_source_publication_moves_its_owned_identity() -> Result<(), Error> {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CLONES: AtomicUsize = AtomicUsize::new(0);
+        #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+        struct Id(u64);
+        impl Clone for Id {
+            fn clone(&self) -> Self {
+                CLONES.fetch_add(1, Ordering::Relaxed);
+                Self(self.0)
+            }
+        }
+        let state = State::<Id, u64>::new(BTreeMap::new());
+        let mut meter = Meter::new(ExecutionBudget::default());
+        let pending = state.changes(BTreeMap::from([(Id(7), Some(Arc::new(11)))]), &mut meter)?;
+        assert_eq!(pending[0].id().0, 7);
+        assert_eq!(
+            CLONES.load(Ordering::Relaxed),
+            0,
+            "owned source ID must not be cloned for publication"
+        );
+        Ok(())
     }
 }

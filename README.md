@@ -148,3 +148,6 @@ ID-only dequeue interface, single-row join patches and before/after measurements
 
 The [paired performance validation](docs/fanout-performance.md) separates
 short-path noise from large-fanout improvements using A/A controls and paired runs.
+
+The [rebuilt-instance study](docs/rebuilt-performance.md) validates the single-entry
+source fast path across fresh instances, creation orders, roles and processes.

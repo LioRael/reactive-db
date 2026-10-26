@@ -199,3 +199,11 @@ of equal identities. Only output identities are cloned. Temporary candidate
 slots scale with pre-deduplication visits, and stable sort may use additional
 scratch space; neither buffer persists beyond the write. Budget counters still
 charge enumeration and unique evaluation, not comparison or byte costs.
+
+## Single-entry source publication
+
+A one-entry source patch moves its owned identity into the final Change and
+constructs the shared slice directly. Work/output charging precedes publication;
+no-op entries remain empty, while equal-valued new Arcs remain replacements.
+Empty and multi-entry patches keep the existing vector path. This changes neither
+operator scheduling nor the atomic prepare/commit boundary.
